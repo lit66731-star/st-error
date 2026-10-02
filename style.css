@@ -246,15 +246,19 @@
 }
 .st-err__adv:hover { background: var(--white30a); }
 
-/* 事件日志时间线 */
+/* 事件日志时间线（默认限高可滚动，点「展开全部」后不限高看全） */
 .st-err__events {
     margin-top: 6px;
-    max-height: 180px;
+    max-height: 320px;
     overflow-y: auto;
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
     padding: 4px 8px;
     background: var(--black30a);
+}
+.st-err__events.is-expanded {
+    max-height: none;
+    overflow-y: visible;
 }
 .st-err__ev {
     display: flex;
@@ -271,6 +275,11 @@
     color: var(--SmartThemeEmColor);
     white-space: nowrap;
 }
+.st-err__ev-who {
+    color: var(--SmartThemeQuoteColor);
+    white-space: nowrap;
+    font-weight: 600;
+}
 .st-err__ev-loc {
     color: var(--SmartThemeQuoteColor);
     white-space: nowrap;
@@ -280,7 +289,57 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1;
+    min-width: 0;
 }
+.st-err__ev-pin { font-size: 11px; }
+.st-err__ev-edit {
+    flex: 0 0 auto;
+    border: none;
+    background: transparent;
+    color: var(--SmartThemeEmColor);
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: 13px;
+}
+.st-err__ev-edit:hover { color: var(--SmartThemeBodyColor); }
+.st-err__expand {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    background: var(--black30a);
+    color: var(--SmartThemeEmColor);
+    border-radius: 8px;
+    padding: 6px 0;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.st-err__expand:hover { background: var(--white30a); }
+
+/* 单条消息时间编辑框 */
+.st-err__editbox {
+    margin: 4px 0 10px;
+    padding: 10px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    background: var(--black30a);
+}
+.st-err__editbox .st-err__label { margin-bottom: 8px; }
+.st-err__editbox .st-err__add-row { margin-bottom: 0; }
+.st-err__edit-day { width: 80px; }
+.st-err__edit-hm { width: 90px; }
+.st-err__edit-day, .st-err__edit-hm {
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--SmartThemeBodyColor);
+    background: var(--black30a);
+    outline: none;
+}
+.st-err__edit-day:focus, .st-err__edit-hm:focus { border-color: var(--SmartThemeEmColor); }
 
 /* 冲突警告 */
 .st-err__conflict {
