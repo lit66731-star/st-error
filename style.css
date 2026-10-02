@@ -1,0 +1,276 @@
+/* ========== 面板：实色白（左上角，与 Serendipity 右侧面板错开） ========== */
+#st-error {
+    position: fixed;
+    top: 72px;
+    left: 20px;
+    z-index: 2147483000 !important; /* 极高层级，避免被其他插件浮层盖住 */
+    width: 400px;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 90px);
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 16px;
+    color: #333333;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 与其他插件隔离：清掉酒馆/别的插件加在文字和元素上的外发光与阴影 */
+#st-error,
+#st-error * {
+    text-shadow: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+}
+#st-error {
+    touch-action: manipulation;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.st-err__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #eeeeee;
+}
+.st-err__title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #222222;
+    letter-spacing: 0.3px;
+}
+.st-err__head-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.st-err__char {
+    font-size: 11px;
+    color: #999999;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+.st-err__close {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: #999999;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+}
+.st-err__close:hover { background: #f0f0f0; color: #333333; }
+.st-err__close svg { width: 16px; height: 16px; }
+
+/* tab */
+.st-err__tabs {
+    display: flex;
+    padding: 0 16px;
+    border-bottom: 1px solid #eeeeee;
+}
+.st-err__tab {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 10px 0;
+    font-size: 13px;
+    color: #888888;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+}
+.st-err__tab.is-active {
+    color: #222222;
+    font-weight: 600;
+    border-bottom-color: #222222;
+}
+.st-err__tab:hover { color: #333333; }
+
+/* 面板内容 */
+.st-err__pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding: 12px 16px 16px;
+}
+
+.st-err__label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333333;
+    margin-bottom: 10px;
+}
+.st-err__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+/* 上下文统计 */
+.st-err__context {
+    margin-bottom: 10px;
+}
+.st-err__stat {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+.st-err__stat-num {
+    font-size: 26px;
+    font-weight: 700;
+    color: #222222;
+}
+.st-err__stat-sep, .st-err__stat-max {
+    font-size: 15px;
+    color: #888888;
+}
+.st-err__stat-unit {
+    font-size: 12px;
+    color: #aaaaaa;
+    margin-left: 2px;
+}
+.st-err__stat-pct {
+    margin-left: auto;
+    font-size: 15px;
+    font-weight: 700;
+}
+.st-err__bar {
+    height: 8px;
+    border-radius: 4px;
+    background: #eeeeee;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+.st-err__bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s, background 0.3s;
+}
+.st-err__stat-time {
+    font-size: 11px;
+    color: #bbbbbb;
+}
+
+/* 时间显示 */
+.st-err__time-display {
+    font-size: 14px;
+    font-weight: 600;
+    color: #222222;
+    background: #fafafa;
+    border: 1px solid #eeeeee;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+    line-height: 1.6;
+    word-break: break-word;
+}
+.st-err__add-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.st-err__time-input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid #dddddd;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: #333333;
+    outline: none;
+}
+.st-err__time-input:focus { border-color: #333333; }
+.st-err__time-save {
+    border: none;
+    background: #222222;
+    color: #ffffff;
+    border-radius: 8px;
+    padding: 0 16px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.st-err__time-save:hover { background: #444444; }
+.st-err__time-extract {
+    border: 1px solid #dddddd;
+    background: #ffffff;
+    color: #333333;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 10px;
+}
+.st-err__time-extract:hover { background: #f5f5f5; }
+
+/* 开关 */
+.st-err__switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    flex: 0 0 auto;
+}
+.st-err__switch input { opacity: 0; width: 0; height: 0; }
+.st-err__switch-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #cccccc;
+    border-radius: 22px;
+    transition: background 0.2s;
+}
+.st-err__switch-slider::before {
+    content: '';
+    position: absolute;
+    width: 18px; height: 18px;
+    left: 2px; bottom: 2px;
+    background: #ffffff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+.st-err__switch input:checked + .st-err__switch-slider { background: #4caf50; }
+.st-err__switch input:checked + .st-err__switch-slider::before { transform: translateX(18px); }
+
+.st-err__hint {
+    margin-top: 10px;
+    font-size: 11px;
+    color: #aaaaaa;
+    line-height: 1.5;
+}
+.st-err__empty {
+    padding: 20px 10px;
+    text-align: center;
+    color: #bbbbbb;
+    font-size: 12.5px;
+}
+
+/* ========== 移动端（与酒馆一致：≤1000px 判定为移动） ========== */
+@media screen and (max-width: 1000px) {
+    #st-error {
+        top: 56px;
+        bottom: auto;
+        left: 8px;
+        right: auto;
+        width: calc(100vw - 16px);
+        width: calc(100dvw - 16px);
+        max-width: none;
+        max-height: calc(100vh - 110px);
+        max-height: calc(100dvh - 110px);
+    }
+}
