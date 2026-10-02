@@ -205,6 +205,15 @@
     color: var(--SmartThemeEmColor);
     line-height: 1.5;
 }
+.st-err__status {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--SmartThemeBorderColor);
+    font-size: 11px;
+    color: var(--SmartThemeEmColor);
+    line-height: 1.5;
+    word-break: break-word;
+}
 .st-err__empty {
     padding: 20px 10px;
     text-align: center;

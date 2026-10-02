@@ -32,6 +32,9 @@ let contextTokens = 0;       // 最近一次真实生成的 prompt token 数
 let contextMax = 0;          // 配置的最大上下文
 let contextUpdatedAt = 0;    // 最近一次统计时间戳
 
+// 旧版酒馆没有 GENERATE_AFTER_COMBINE_PROMPTS 事件；没有时上下文统计退化为估算聊天文本
+const HAS_AFTER_COMBINE = !!(event_types && event_types.GENERATE_AFTER_COMBINE_PROMPTS);
+
 // ---------------- 设置 ----------------
 function freshCharSettings() {
     return {
@@ -124,8 +127,9 @@ async function extractTimeLastRound() {
     activateCharacter();
     if (!settings.timeEnabled || isExtracting) return;
     const pair = lastRound();
-    if (!pair) return;
+    if (!pair) { setStatus('还没有可提取的对话（至少一轮你问我答）'); return; }
     isExtracting = true;
+    setStatus('正在提取剧情时间…');
     try {
         const anchor = settings.storyTime
             ? '上一次剧情时间：' + settings.storyTime + '。若本段对话没有明确推进时间，请沿用这个时间；若剧情明确推进了，请给出推进后的具体时间。'
@@ -144,9 +148,15 @@ async function extractTimeLastRound() {
             saveSettings();
             updateTimeInjection();
             renderTime();
+            setStatus('已提取剧情时间：' + t);
+            console.log('[Error] 剧情时间 →', t);
+        } else {
+            setStatus('本轮未识别到时间，沿用上一次' + (settings.storyTime ? '（' + settings.storyTime + '）' : '（暂无）'));
         }
     } catch (e) {
         console.error('[Error] 剧情时间提取失败：', e);
+        setStatus('时间提取失败，请按 F12 查看控制台错误');
+        toastr.error('[Error] 剧情时间提取失败：' + (e && e.message ? e.message : e));
     } finally {
         isExtracting = false;
     }
@@ -154,7 +164,7 @@ async function extractTimeLastRound() {
 
 // ---------------- 上下文用量监控 ----------------
 // 异步统计（不阻塞生成）。用 token_padding 与酒馆内部保持一致。
-async function refreshContextUsage(promptText) {
+async function refreshContextUsage(promptText, label) {
     if (typeof promptText !== 'string' || !promptText) return;
     try {
         const tokens = await getTokenCountAsync(promptText, power_user.token_padding);
@@ -163,9 +173,18 @@ async function refreshContextUsage(promptText) {
         contextUpdatedAt = Date.now();
         renderContext();
         checkContextWarn();
+        setStatus('上下文已统计' + (label ? '（' + label + '）' : '') + '：' + tokens + ' tokens');
     } catch (e) {
         console.error('[Error] 上下文统计失败：', e);
+        setStatus('上下文统计失败，请按 F12 查看控制台错误');
     }
+}
+
+// 兜底统计：直接统计当前聊天文本 token（不含世界书/人设，但作为占用参考够用）
+function countChatText() {
+    if (!Array.isArray(chat)) return;
+    const text = chat.map(m => (m && typeof m.mes === 'string' ? m.mes : '')).join('\n');
+    if (text.trim()) refreshContextUsage(text, '聊天文本估算');
 }
 
 function checkContextWarn() {
@@ -180,11 +199,16 @@ function checkContextWarn() {
 }
 
 // ---------------- 渲染 ----------------
+function setStatus(text) {
+    const el = $('#error_container .st-err__status');
+    if (el.length) el.text(text);
+}
+
 function renderContext() {
     const box = $('#error_container .st-err__context');
     if (!box.length) return;
     if (!contextMax || !contextUpdatedAt) {
-        box.html('<div class="st-err__empty">暂无数据。发送一条消息后自动统计。</div>');
+        box.html('<div class="st-err__empty">暂无数据。发送一条消息后自动统计（也可点下方「立即统计」）。</div>');
         return;
     }
     const ratio = contextMax ? Math.min(1, contextTokens / contextMax) : 0;
@@ -235,6 +259,7 @@ function buildSettingsPanel() {
           <div class="st-err__pane" data-pane="context">
             <div class="st-err__label">上下文用量</div>
             <div class="st-err__context"></div>
+            <button type="button" class="st-err__time-extract st-err__ctx-count">立即统计</button>
             <div class="st-err__hint">每次生成后自动统计当前 prompt 占用的 token；超过 ${Math.round(WARN_THRESHOLD * 100)}% 会弹窗提醒，防止上下文溢出导致模型失忆。</div>
           </div>
 
@@ -251,6 +276,8 @@ function buildSettingsPanel() {
             <button type="button" class="st-err__time-extract">立即提取本段时间</button>
             <div class="st-err__hint">剧情时间会恒定注入正文，作为「双重保险」——即使记忆插件总结失败，AI 也知道当前时间。自动提取每轮做一次极轻量的模型调用；没识别到就沿用上一次。</div>
           </div>
+
+          <div class="st-err__status"></div>
         </div>
       </div>
     </div>`;
@@ -285,6 +312,7 @@ function bindPanelEvents() {
         saveSettings();
         updateTimeInjection();
         renderTime();
+        setStatus('已手动更新时间：' + v);
         input.val('');
         toastr.success('已更新时间');
     };
@@ -293,6 +321,8 @@ function bindPanelEvents() {
 
     // 立即提取
     panel.on('click', '.st-err__time-extract', extractTimeLastRound);
+    // 立即统计上下文
+    panel.on('click', '.st-err__ctx-count', countChatText);
 }
 
 // ---------------- 初始化 ----------------
@@ -300,18 +330,13 @@ jQuery(async () => {
     globalSettings = loadSettings();
     activateCharacter();
     buildSettingsPanel();
-
     updateTimeInjection();
 
-    // 上下文统计：真实生成开始时置标记；生成后统计 prompt token（排除 quiet/原始调用）
-    eventSource.on(event_types.GENERATION_STARTED, () => { isRealGeneration = true; });
-    eventSource.on(event_types.GENERATE_AFTER_COMBINE_PROMPTS, (data) => {
-        if (!isRealGeneration) return;
-        const p = data && data.prompt;
-        if (typeof p === 'string' && p) refreshContextUsage(p);
-    });
+    // —— 时间追踪：只挂 GENERATION_ENDED（老牌事件，所有版本都有，与记忆插件一致）——
     eventSource.on(event_types.GENERATION_ENDED, () => {
         isRealGeneration = false;
+        // 兜底：没有精确上下文事件时，退化为统计聊天文本
+        if (!HAS_AFTER_COMBINE) countChatText();
         // 每轮 AI 回复后，独立提取一次剧情时间（双重保险）
         setTimeout(() => extractTimeLastRound(), 200);
     });
@@ -327,9 +352,24 @@ jQuery(async () => {
         }, 150);
     });
 
+    // —— 上下文统计（精确口径）：旧版酒馆没有这些事件就跳过，走上面兜底 ——
+    if (HAS_AFTER_COMBINE) {
+        if (event_types.GENERATION_STARTED) {
+            eventSource.on(event_types.GENERATION_STARTED, () => { isRealGeneration = true; });
+        }
+        eventSource.on(event_types.GENERATE_AFTER_COMBINE_PROMPTS, (data) => {
+            if (!isRealGeneration) return;
+            const p = data && data.prompt;
+            if (typeof p === 'string' && p) refreshContextUsage(p, '精确 prompt');
+        });
+    }
+
     renderTime();
     renderContext();
     renderCharBinding();
+
+    setStatus('已加载，监听生成事件中…' + (HAS_AFTER_COMBINE ? '（精确统计）' : '（聊天文本估算）'));
+    console.log('[Error] 插件已加载', { HAS_AFTER_COMBINE });
 });
 
 // ST 自动更新后调用，刷新页面以应用新版本
