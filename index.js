@@ -11,9 +11,11 @@ import {
     chat_metadata,
     saveChatDebounced,
     getMaxContextTokens,
+    getMaxPromptTokens,
+    updateMessageBlock,
 } from '../../../../script.js';
 import { getContext } from '../../../st-context.js';
-import { getTokenCountAsync } from '../../../tokenizers.js';
+import { getTokenCountAsync, getTokenizerModel } from '../../../tokenizers.js';
 import { power_user } from '../../../power-user.js';
 
 const extensionName = 'error';
@@ -28,6 +30,7 @@ const START_DAY = 1;
 const START_MINUTE = 480; // 08:00
 
 const TIME_BLOCK_RE = /<time>([^<]+)<\/time>/i;
+const TIME_BLOCK_GLOBAL_RE = /<time>[^<]*<\/time>/gi;
 
 // 中文相对时间词表（分钟偏移）
 const RELATIVE_TIME = {
@@ -44,6 +47,7 @@ let isRealGeneration = false;// 当前是否在进行真实剧情生成（排除
 let lastPromptCounted = false;// 本轮是否已用精确 prompt 统计过（决定 GENERATION_ENDED 是否兜底）
 let contextTokens = 0;
 let contextMax = 0;
+let currentModel = '';
 let contextUpdatedAt = 0;
 
 // ---------------- 时间轴数据模型 ----------------
@@ -148,6 +152,12 @@ function parseTimeBlock(text) {
     return { day, minuteOfDay, deltaMinutes, location, raw };
 }
 
+// 从正文中移除所有 <time> 块（时间/地点已解析并绑定到 extra，无需再显示或回喂给模型）
+function stripTimeBlocks(text) {
+    if (typeof text !== 'string') return text;
+    return text.replace(TIME_BLOCK_GLOBAL_RE, '').replace(/^\s*\n/, '').trim();
+}
+
 function applyParsed(clock, parsed) {
     if (!parsed) { advanceClock(clock, DEFAULT_ADVANCE_MINUTES); return; }
     if (parsed.day != null && parsed.minuteOfDay != null) {
@@ -169,9 +179,11 @@ function boundTime(m) {
     const t = m && m.extra && m.extra[extensionName];
     return (t && typeof t.day === 'number') ? t : null;
 }
-function bindTime(m, clock, turn, pinned) {
+function bindTime(m, clock, turn, pinned, location) {
     if (!m.extra || typeof m.extra !== 'object') m.extra = {};
-    m.extra[extensionName] = { day: clock.day, minuteOfDay: clock.minuteOfDay, turn, pinned: !!pinned };
+    const t = { day: clock.day, minuteOfDay: clock.minuteOfDay, turn, pinned: !!pinned };
+    if (location) t.location = location;
+    m.extra[extensionName] = t;
 }
 
 // 从某条消息开始重放，重建时间线（编辑/删除/swipe 后回滚）。被「钉住」的消息用其手动时间，不重算。
@@ -192,14 +204,19 @@ function rebuildTimeline(fromIndex = 0) {
         if (!m || m.is_system) continue;
         if (m.is_user) { bindTime(m, state.clock, i); continue; }
         const existing = boundTime(m);
-        if (existing && existing.pinned) {
+        if (existing) {
+            // 已有时间（自动绑定或钉住），沿用，不重算
             state.clock.day = existing.day;
             state.clock.minuteOfDay = existing.minuteOfDay;
             existing.turn = i;
         } else {
-            applyParsed(state.clock, parseTimeBlock(m.mes));
-            bindTime(m, state.clock, i);
+            const parsed = parseTimeBlock(m.mes);
+            applyParsed(state.clock, parsed);
+            bindTime(m, state.clock, i, false, parsed && parsed.location);
         }
+        // 从正文移除 <time> 块（时间与地点已绑定到 extra，正文无需保留）
+        const stripped = stripTimeBlocks(m.mes);
+        if (stripped !== m.mes) m.mes = stripped;
     }
     saveChat();
 }
@@ -209,7 +226,8 @@ function pinMessageTime(index, day, minuteOfDay) {
     const m = chat[index];
     if (!m) return;
     if (!m.extra || typeof m.extra !== 'object') m.extra = {};
-    m.extra[extensionName] = { day, minuteOfDay, turn: index, pinned: true };
+    const prev = boundTime(m);
+    m.extra[extensionName] = { day, minuteOfDay, turn: index, pinned: true, location: prev && prev.location ? prev.location : '' };
     rebuildTimeline(index + 1);
     updateTimeInjection();
     renderTime();
@@ -225,10 +243,8 @@ function recentEvents(n = 3) {
         if (!m || m.is_system || m.is_user) continue;
         const t = boundTime(m);
         if (!t) continue;
-        const parsed = parseTimeBlock(m.mes);
-        const loc = parsed && parsed.location ? parsed.location : '';
-        const summary = (m.mes || '').replace(TIME_BLOCK_RE, '').trim().slice(0, 40);
-        out.push({ day: t.day, minuteOfDay: t.minuteOfDay, location: loc, summary });
+        const summary = (m.mes || '').replace(TIME_BLOCK_GLOBAL_RE, '').trim().slice(0, 40);
+        out.push({ day: t.day, minuteOfDay: t.minuteOfDay, location: t.location || '', summary });
     }
     return out.reverse();
 }
@@ -307,9 +323,8 @@ function renderTimeline() {
         const t = boundTime(m);
         if (!t) continue;
         const who = m.is_user ? '我' : (m.name || 'AI');
-        const parsed = m.is_user ? null : parseTimeBlock(m.mes);
-        const loc = parsed && parsed.location ? parsed.location : '';
-        const text = (m.mes || '').replace(TIME_BLOCK_RE, '').trim().slice(0, 40);
+        const loc = t.location || '';
+        const text = (m.mes || '').replace(TIME_BLOCK_GLOBAL_RE, '').trim().slice(0, 40);
         const pinnedMark = t.pinned ? ' <span class="st-err__ev-pin">📌</span>' : '';
         rows.push(`<div class="st-err__ev">
             <span class="st-err__ev-t">${fmtDaytime(t.day, t.minuteOfDay)}</span>
@@ -331,17 +346,31 @@ function renderConflicts() {
 }
 
 // ---------------- 上下文用量监控 ----------------
+function getContextLimit() {
+    try {
+        // 实际可用 prompt 上限 = 上下文窗口 − 回复长度（不同模型/API 各不同）
+        let max = Number(getMaxPromptTokens()) || 0;
+        if (max <= 0) max = Number(getMaxContextTokens()) || 0;
+        return max;
+    } catch (e) {
+        return Number(getContext().maxContext) || 0;
+    }
+}
+function getCurrentModelName() {
+    try { return String(getTokenizerModel() || '').trim(); } catch (e) { return ''; }
+}
+
 async function refreshContextUsage(promptText, label) {
     if (typeof promptText !== 'string' || !promptText) return;
     try {
         const tokens = await getTokenCountAsync(promptText, power_user.token_padding);
         contextTokens = tokens;
-        try { contextMax = Number(getMaxContextTokens()) || 0; }
-        catch (e) { contextMax = Number(getContext().maxContext) || 0; }
+        contextMax = getContextLimit();
+        currentModel = getCurrentModelName();
         contextUpdatedAt = Date.now();
         renderContext();
         checkContextWarn();
-        setStatus('上下文已统计' + (label ? '（' + label + '）' : '') + '：' + tokens + ' / ' + contextMax + ' tokens');
+        setStatus('上下文已统计' + (label ? '（' + label + '）' : '') + '：' + tokens + ' / ' + contextMax + ' tokens' + (currentModel ? '（模型 ' + currentModel + '）' : ''));
     } catch (e) {
         console.error('[Error] 上下文统计失败：', e);
         setStatus('上下文统计失败，请按 F12 查看控制台错误');
@@ -373,6 +402,7 @@ function setStatus(text) {
 function renderContext() {
     const box = $('#error_container .st-err__context');
     if (!box.length) return;
+    if (contextMax && !currentModel) currentModel = getCurrentModelName();
     if (!contextMax || !contextUpdatedAt) {
         box.html('<div class="st-err__empty">暂无数据。发送一条消息后自动统计（也可点下方「立即统计」）。</div>');
         return;
@@ -389,7 +419,7 @@ function renderContext() {
             <span class="st-err__stat-pct" style="color:${color}">${pct}%</span>
         </div>
         <div class="st-err__bar"><div class="st-err__bar-fill" style="width:${Math.round(ratio * 100)}%;background:${color}"></div></div>
-        <div class="st-err__stat-time">最近统计：${fmtNow(contextUpdatedAt)}</div>
+        <div class="st-err__stat-time">最近统计：${fmtNow(contextUpdatedAt)}${currentModel ? ' · 模型 ' + escapeHtml(currentModel) : ''}</div>
     `);
 }
 
@@ -419,7 +449,7 @@ function buildSettingsPanel() {
             <div class="st-err__label">上下文用量</div>
             <div class="st-err__context"></div>
             <button type="button" class="st-err__time-extract st-err__ctx-count">立即统计</button>
-            <div class="st-err__hint">每次生成后自动统计当前 prompt 占用的 token；超过 ${Math.round(WARN_THRESHOLD * 100)}% 会弹窗提醒，防止上下文溢出导致模型失忆。</div>
+            <div class="st-err__hint">每次生成后自动统计当前 prompt 占用；上限按当前模型/API 的「可用上下文」（上下文窗口 − 回复长度）动态取，切换模型会自动变，超过 ${Math.round(WARN_THRESHOLD * 100)}% 弹窗提醒，防止溢出失忆。</div>
           </div>
 
           <div class="st-err__pane" data-pane="time" style="display:none">
@@ -621,13 +651,18 @@ jQuery(async () => {
     registerSlashCommands();
 
     // —— 时间追踪 ——
-    eventSource.on(event_types.MESSAGE_RECEIVED, () => {
-        setTimeout(() => {
-            rebuildTimeline(chat.length >= 2 ? chat.length - 2 : 0);
-            updateTimeInjection();
-            renderTime();
-            setStatus('已推进时间 → ' + fmtDaytime(getTimeState().clock.day, getTimeState().clock.minuteOfDay));
-        }, 150);
+    eventSource.on(event_types.MESSAGE_RECEIVED, (messageId) => {
+        const idx = Number.isInteger(messageId) ? messageId : (chat.length - 1);
+        const m = chat[idx];
+        const before = m ? m.mes : '';
+        rebuildTimeline(idx >= 1 ? idx - 1 : 0);
+        updateTimeInjection();
+        renderTime();
+        // 流式路径消息已渲染，去掉 <time> 后需重渲染；非流式路径此时尚未 addOneMessage，调用无害
+        if (m && !m.is_user && !m.is_system && m.mes !== before) {
+            try { updateMessageBlock(idx, m); } catch (e) { /* 忽略渲染异常 */ }
+        }
+        setStatus('已推进时间 → ' + fmtDaytime(getTimeState().clock.day, getTimeState().clock.minuteOfDay));
     });
     eventSource.on(event_types.MESSAGE_SENT, () => {
         const last = chat[chat.length - 1];

@@ -3,7 +3,7 @@
     "display_name": "Error",
     "description": "上下文用量监控 + 剧情时间追踪（双重保险），入口在扩展程序抽屉，白色设置块。",
     "author": "cc_test",
-    "version": "1.3.1",
+    "version": "1.4.0",
     "loading_order": 100,
     "requires": [],
     "optional": [],
