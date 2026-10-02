@@ -9,8 +9,8 @@ import {
     saveSettingsDebounced,
     setExtensionPrompt,
     extension_prompt_types,
-    getContext,
 } from '../../../../script.js';
+import { getContext } from '../../../st-context.js';
 import { getTokenCountAsync } from '../../../tokenizers.js';
 import { power_user } from '../../../power-user.js';
 
