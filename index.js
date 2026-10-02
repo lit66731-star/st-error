@@ -181,7 +181,7 @@ function checkContextWarn() {
 
 // ---------------- 渲染 ----------------
 function renderContext() {
-    const box = $('#st-error .st-err__context');
+    const box = $('#error_container .st-err__context');
     if (!box.length) return;
     if (!contextMax || !contextUpdatedAt) {
         box.html('<div class="st-err__empty">暂无数据。发送一条消息后自动统计。</div>');
@@ -204,78 +204,63 @@ function renderContext() {
 }
 
 function renderTime() {
-    const el = $('#st-error .st-err__time-display');
+    const el = $('#error_container .st-err__time-display');
     if (el.length) el.text(settings.storyTime || '（尚未追踪到剧情时间，发送一条消息后自动提取）');
-    const toggle = $('#st-error .st-err__time-toggle');
+    const toggle = $('#error_container .st-err__time-toggle');
     if (toggle.length) toggle.prop('checked', !!settings.timeEnabled);
 }
 
 function renderCharBinding() {
-    const el = $('#st-error .st-err__char');
+    const el = $('#error_container .st-err__char');
     if (el.length) el.text(activeChar ? ('绑定角色：' + activeChar) : '未绑定角色');
 }
 
-// ---------------- 图标 / 入口 / 面板 ----------------
-const ICONS = {
-    close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
-};
-
-function buildMenuButton() {
-    if ($('#st-error-menu-button').length) return;
-    const btn = $(`
-        <div id="st-error-menu-button" class="list-group-item flex-container flexGap5 interactable"
-             title="Error：上下文用量监控 + 剧情时间追踪" tabindex="0" role="listitem">
-            <div class="fa-fw fa-solid fa-triangle-exclamation extensionsMenuExtensionButton"></div>
-            <span>Error</span>
-        </div>`);
-    btn.on('click', () => togglePanel());
-    $('#extensionsMenu').append(btn);
-}
-
-function buildPanel() {
-    if ($('#st-error').length) return;
+// ---------------- 设置面板（注入到酒馆「扩展程序」抽屉 #extensions_settings） ----------------
+function buildSettingsPanel() {
+    if ($('#error_container').length) return;
     const html = `
-    <div id="st-error" class="st-err" style="display:none">
-      <div class="st-err__head">
-        <div class="st-err__head-left">
-          <span class="st-err__title">Error</span>
+    <div id="error_container" class="extension_container">
+      <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+          <b>Error</b>
           <span class="st-err__char"></span>
+          <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
-        <button type="button" class="st-err__close" title="关闭">${ICONS.close}</button>
-      </div>
-      <div class="st-err__tabs">
-        <button type="button" class="st-err__tab is-active" data-tab="context">上下文</button>
-        <button type="button" class="st-err__tab" data-tab="time">时间</button>
-      </div>
+        <div class="inline-drawer-content" style="display:none">
+          <div class="st-err__tabs">
+            <button type="button" class="st-err__tab is-active" data-tab="context">上下文</button>
+            <button type="button" class="st-err__tab" data-tab="time">时间</button>
+          </div>
 
-      <div class="st-err__pane" data-pane="context">
-        <div class="st-err__label">上下文用量</div>
-        <div class="st-err__context"></div>
-        <div class="st-err__hint">每次生成后自动统计当前 prompt 占用的 token；超过 ${Math.round(WARN_THRESHOLD * 100)}% 会弹窗提醒，防止上下文溢出导致模型失忆。</div>
-      </div>
+          <div class="st-err__pane" data-pane="context">
+            <div class="st-err__label">上下文用量</div>
+            <div class="st-err__context"></div>
+            <div class="st-err__hint">每次生成后自动统计当前 prompt 占用的 token；超过 ${Math.round(WARN_THRESHOLD * 100)}% 会弹窗提醒，防止上下文溢出导致模型失忆。</div>
+          </div>
 
-      <div class="st-err__pane" data-pane="time" style="display:none">
-        <div class="st-err__toolbar">
-          <span class="st-err__label">自动追踪时间</span>
-          <label class="st-err__switch"><input type="checkbox" class="st-err__time-toggle"><span class="st-err__switch-slider"></span></label>
+          <div class="st-err__pane" data-pane="time" style="display:none">
+            <div class="st-err__toolbar">
+              <span class="st-err__label">自动追踪时间</span>
+              <label class="st-err__switch"><input type="checkbox" class="st-err__time-toggle"><span class="st-err__switch-slider"></span></label>
+            </div>
+            <div class="st-err__time-display"></div>
+            <div class="st-err__add-row">
+              <input type="text" class="st-err__time-input" placeholder="手动设置时间，如 2026年10月3日 周五 下午3点">
+              <button type="button" class="st-err__time-save">更新</button>
+            </div>
+            <button type="button" class="st-err__time-extract">立即提取本段时间</button>
+            <div class="st-err__hint">剧情时间会恒定注入正文，作为「双重保险」——即使记忆插件总结失败，AI 也知道当前时间。自动提取每轮做一次极轻量的模型调用；没识别到就沿用上一次。</div>
+          </div>
         </div>
-        <div class="st-err__time-display"></div>
-        <div class="st-err__add-row">
-          <input type="text" class="st-err__time-input" placeholder="手动设置时间，如 2026年10月3日 周五 下午3点">
-          <button type="button" class="st-err__time-save">更新</button>
-        </div>
-        <button type="button" class="st-err__time-extract">立即提取本段时间</button>
-        <div class="st-err__hint">剧情时间会恒定注入正文，作为「双重保险」——即使记忆插件总结失败，AI 也知道当前时间。自动提取每轮做一次极轻量的模型调用；没识别到就沿用上一次。</div>
       </div>
     </div>`;
-    $('body').append(html);
+    $('#extensions_settings').append(html);
     bindPanelEvents();
 }
 
 function bindPanelEvents() {
-    const panel = $('#st-error');
+    const panel = $('#error_container');
 
-    panel.find('.st-err__close').on('click', () => togglePanel(false));
     panel.find('.st-err__tab').on('click', function () {
         const name = $(this).data('tab');
         panel.find('.st-err__tab').removeClass('is-active');
@@ -310,42 +295,11 @@ function bindPanelEvents() {
     panel.on('click', '.st-err__time-extract', extractTimeLastRound);
 }
 
-function fitPanelToViewport() {
-    const panel = $('#st-error');
-    if (!panel.length) return;
-    if (window.innerWidth <= 1000) {
-        const margin = 8, top = 56, bottomGap = 60;
-        panel.css({
-            top: top + 'px', bottom: 'auto', left: margin + 'px', right: 'auto',
-            width: (window.innerWidth - margin * 2) + 'px', maxWidth: 'none',
-            maxHeight: Math.max(200, window.innerHeight - top - bottomGap) + 'px',
-        });
-    } else {
-        panel.css({ top: '', bottom: '', left: '', right: '', width: '', maxWidth: '', maxHeight: '' });
-    }
-}
-
-function togglePanel(force) {
-    const panel = $('#st-error');
-    if (!panel.length) return;
-    const show = force === undefined ? !panel.is(':visible') : force;
-    if (show) {
-        fitPanelToViewport();
-        panel.show();
-        renderTime();
-        renderContext();
-        renderCharBinding();
-    } else {
-        panel.hide();
-    }
-}
-
 // ---------------- 初始化 ----------------
 jQuery(async () => {
     globalSettings = loadSettings();
     activateCharacter();
-    buildMenuButton();
-    buildPanel();
+    buildSettingsPanel();
 
     updateTimeInjection();
 
@@ -372,9 +326,6 @@ jQuery(async () => {
             renderCharBinding();
         }, 150);
     });
-
-    $(window).on('resize.st-err', fitPanelToViewport);
-    $(window).on('orientationchange.st-err', () => setTimeout(fitPanelToViewport, 300));
 
     renderTime();
     renderContext();
