@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.2.2'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.3.0'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -265,6 +265,49 @@ async function idbDel(id) {
     } catch (e) {}
 }
 
+// ---------------- 歌源（source adapter） ----------------
+// 每个歌源只需实现 resolve(song) → 可播放地址；新增平台（QQ/酷狗等）在此注册即可
+const NCM_OUTER = (id) => `https://music.163.com/song/media/outer/url?id=${id}.mp3`;
+
+const SOURCES = {
+    url: {
+        resolve: async (s) => s.url,
+    },
+    local: {
+        errorMsg: '读取本地文件失败',
+        resolve: async (s) => {
+            const blob = await idbGet(s.fileId);
+            if (!blob) { toastr.warning('本地文件不存在，已跳过'); return null; }
+            currentObjectUrl = URL.createObjectURL(blob);
+            return currentObjectUrl;
+        },
+    },
+    netease: {
+        errorMsg: '解析网易云播放地址失败',
+        resolve: async (s) => {
+            // 没配 API：走公开外链（免登录，仅限免费/有版权的歌）
+            if (!settings.neteaseApi) return NCM_OUTER(s.ncmId);
+            // 签名链接有时效，5 分钟内复用缓存
+            if (!s.resolvedUrl || !s.resolvedAt || (Date.now() - s.resolvedAt) > 5 * 60 * 1000) {
+                const url = await ncmResolveUrl(s.ncmId);
+                if (!url) { toastr.warning('这首歌没有可用播放链接（可能无版权或未登录）'); return null; }
+                s.resolvedUrl = url;
+                s.resolvedAt = Date.now();
+            }
+            return s.resolvedUrl;
+        },
+    },
+};
+
+// 从粘贴内容里识别网易云歌曲 ID：纯数字，或含 id=xxx / /song/xxx 的链接
+function parseNeteaseInput(text) {
+    text = (text || '').trim();
+    if (/^\d{4,}$/.test(text)) return text;
+    if (!/163\.com|163cn\.tv/i.test(text)) return null;
+    const m = text.match(/[?&#]id=(\d+)/) || text.match(/\/song\/(\d+)/);
+    return m ? m[1] : null;
+}
+
 // ---------------- 播放内核 ----------------
 function currentSong() { return settings.songs[settings.currentIndex]; }
 
@@ -284,33 +327,17 @@ async function playIndex(i) {
     // 释放上一个本地文件的 object URL
     if (currentObjectUrl) { URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
 
+    const adapter = SOURCES[s.source] || SOURCES.url;
     let src;
-    if (s.source === 'local') {
-        try {
-            const blob = await idbGet(s.fileId);
-            if (!blob) { toastr.warning('本地文件不存在，已跳过'); return; }
-            currentObjectUrl = URL.createObjectURL(blob);
-            src = currentObjectUrl;
-        } catch (e) { toastr.error('读取本地文件失败'); return; }
-    } else if (s.source === 'netease') {
-        // 网易云签名链接有时效，播放时动态解析（5 分钟内复用缓存）
-        try {
-            if (!s.resolvedUrl || !s.resolvedAt || (Date.now() - s.resolvedAt) > 5 * 60 * 1000) {
-                const url = await ncmResolveUrl(s.ncmId);
-                if (!url) { toastr.warning('这首歌没有可用播放链接（可能无版权或未登录）'); return; }
-                s.resolvedUrl = url;
-                s.resolvedAt = Date.now();
-            }
-            src = s.resolvedUrl;
-        } catch (e) { toastr.error('解析网易云播放地址失败'); return; }
-    } else {
-        src = s.url;
-    }
+    try {
+        src = await adapter.resolve(s);
+    } catch (e) { toastr.error(adapter.errorMsg || '解析播放地址失败'); return; }
+    if (!src) return;
 
     try {
         audio.src = src;
         await audio.play();
-        if (s.source === 'netease') ncmLoadLyric(s.ncmId);
+        if (s.source === 'netease' && settings.neteaseApi) ncmLoadLyric(s.ncmId);
         renderDuoChat();
         duoStartLoreFlow();
     } catch (e) {
@@ -367,9 +394,33 @@ function setVolume(v) {
 }
 
 // ---------------- 歌单操作 ----------------
+async function addNeteaseById(ncmId) {
+    let idx = settings.songs.findIndex(s => s.source === 'netease' && String(s.ncmId) === String(ncmId));
+    if (idx >= 0) { toastr.info('这首歌已在列表里'); return; }
+    let title = '网易云 #' + ncmId, artist = '', cover = '', duration = null;
+    // 配了 API 就顺手取歌名；没配则用占位名（外链无需 API 也能播）
+    if (settings.neteaseApi) {
+        try {
+            const d = await ncmFetch(`/song/detail?ids=${ncmId}`);
+            const t = d && d.songs && d.songs[0];
+            if (t) {
+                title = t.name;
+                artist = (t.ar || []).map(a => a.name).join(' / ');
+                cover = (t.al && t.al.picUrl) || '';
+                duration = (t.dt || 0) / 1000;
+            }
+        } catch (e) {}
+    }
+    settings.songs.push({ id: uid(), title, artist, cover, duration, source: 'netease', ncmId });
+    saveSettings();
+    renderAll();
+}
+
 async function addUrlSong(url, title) {
     url = (url || '').trim();
     if (!url) return;
+    const ncmId = parseNeteaseInput(url);
+    if (ncmId) return addNeteaseById(ncmId);
     title = (title || '').trim() || url.split('/').pop().split('?')[0].replace(/\.[a-z0-9]+$/i, '') || '未命名';
     settings.songs.push({ id: uid(), title, artist: '', source: 'url', url, duration: null });
     saveSettings();
@@ -793,7 +844,7 @@ function buildPanel() {
             <div class="err__ncm-results"></div>
           </div>
           <div class="err__add-row">
-            <input type="text" class="err__url-input" placeholder="粘贴音频直链（.mp3/.m4a/…）">
+            <input type="text" class="err__url-input" placeholder="粘贴网易云歌曲链接/ID，或音频直链">
             <button type="button" class="err__add-url" title="添加直链">${ICONS.plus}</button>
             <button type="button" class="err__add-local" title="添加本地文件">${ICONS.folder}</button>
           </div>
