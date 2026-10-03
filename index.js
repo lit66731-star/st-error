@@ -1,11 +1,12 @@
 /* ==========================================================================
    error · 音乐播放器（SillyTavern 第三方扩展）
    界面仿网易云音乐，配色沿用 Serendipity 的暖白 + 灰玫瑰体系。
-   歌源：本地文件（存 IndexedDB）+ 直链 URL；播放内核用 HTML5 Audio。
+   歌源：本地文件（存 IndexedDB）+ 直链 URL + 网易云（需自建 NeteaseCloudMusicApi）；
+   播放内核用 HTML5 Audio。
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.0.1'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.1.0'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -23,6 +24,10 @@ const ICONS = {
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
     link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1.5 1.5"/><path d="M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1.5-1.5"/></svg>',
     plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    qr: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM19 14h2v3h-2zM14 19h3v2h-3zM19 19h2v2h-2z"/></svg>',
+    cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .7-7.94A5.5 5.5 0 0 0 7.1 8.5 4.5 4.5 0 0 0 7 18z"/></svg>',
 };
 
 // ---------------- 状态 ----------------
@@ -33,10 +38,20 @@ const LOOP_MODES = [
 ];
 
 let settings = {
-    songs: [],          // { id, title, artist, source: 'url'|'local', url?, fileId?, duration? }
+    songs: [],          // { id, title, artist, source: 'url'|'local'|'netease', url?, fileId?, ncmId?, cover?, duration? }
     currentIndex: -1,
     loopMode: 'list',
     volume: 0.8,
+    neteaseApi: '',     // 网易云 API 地址（NeteaseCloudMusicApi），如 http://127.0.0.1:3000
+    neteaseLoggedIn: false,
+};
+
+const ncm = {
+    results: [],        // 搜索结果缓存
+    lyricLines: [],     // 当前歌词 [{time, text}]
+    lyricTrans: [],     // 翻译 [{time, text}]
+    qrKey: '',
+    qrTimer: null,
 };
 
 let audio = new Audio();
@@ -122,6 +137,10 @@ async function playIndex(i) {
     settings.currentIndex = i;
     const s = settings.songs[i];
     saveSettings();
+    // 切歌先清空歌词；netease 曲目会在播放成功后重新加载
+    ncm.lyricLines = [];
+    ncm.lyricTrans = [];
+    renderLyric();
 
     // 释放上一个本地文件的 object URL
     if (currentObjectUrl) { URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
@@ -134,6 +153,17 @@ async function playIndex(i) {
             currentObjectUrl = URL.createObjectURL(blob);
             src = currentObjectUrl;
         } catch (e) { toastr.error('读取本地文件失败'); return; }
+    } else if (s.source === 'netease') {
+        // 网易云签名链接有时效，播放时动态解析（5 分钟内复用缓存）
+        try {
+            if (!s.resolvedUrl || !s.resolvedAt || (Date.now() - s.resolvedAt) > 5 * 60 * 1000) {
+                const url = await ncmResolveUrl(s.ncmId);
+                if (!url) { toastr.warning('这首歌没有可用播放链接（可能无版权或未登录）'); return; }
+                s.resolvedUrl = url;
+                s.resolvedAt = Date.now();
+            }
+            src = s.resolvedUrl;
+        } catch (e) { toastr.error('解析网易云播放地址失败'); return; }
     } else {
         src = s.url;
     }
@@ -141,6 +171,7 @@ async function playIndex(i) {
     try {
         audio.src = src;
         await audio.play();
+        if (s.source === 'netease') ncmLoadLyric(s.ncmId);
     } catch (e) {
         toastr.warning('播放失败：' + (s.title || s.url));
     }
@@ -247,6 +278,207 @@ async function removeSong(id) {
     renderAll();
 }
 
+// ---------------- 网易云（NeteaseCloudMusicApi） ----------------
+async function ncmFetch(path) {
+    const base = (settings.neteaseApi || '').replace(/\/+$/, '');
+    if (!base) { toastr.warning('请先配置网易云 API 地址（点旁边的齿轮）'); return null; }
+    const res = await fetch(base + path, { credentials: 'omit' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+}
+
+async function ncmSearch(keyword) {
+    keyword = (keyword || '').trim();
+    if (!keyword) return;
+    const el = $('#st-error .err__ncm-results');
+    if (el.length) el.html('<div class="err__ncm-hint">搜索中…</div>');
+    try {
+        const d = await ncmFetch(`/search?keywords=${encodeURIComponent(keyword)}&limit=30&type=1`);
+        const songs = (d && d.result && d.result.songs) || [];
+        ncm.results = songs.map(s => ({
+            id: s.id,
+            name: s.name,
+            artist: (s.ar || s.artists || []).map(a => a.name).join(' / '),
+            cover: ((s.al || s.album || {}).picUrl) || '',
+            duration: (s.dt || s.duration || 0) / 1000,
+        }));
+        renderNcmResults();
+    } catch (e) {
+        if (el.length) el.html('<div class="err__ncm-hint">搜索失败，请检查 API 地址</div>');
+    }
+}
+
+function renderNcmResults() {
+    const el = $('#st-error .err__ncm-results');
+    if (!el.length) return;
+    el.empty();
+    if (!ncm.results.length) { el.append('<div class="err__ncm-hint">没有结果</div>'); return; }
+    ncm.results.forEach(s => {
+        const thumb = s.cover
+            ? `<span class="err__ncm-thumb" style="background-image:url('${s.cover.replace(/'/g, "\\'")}')"></span>`
+            : `<span class="err__ncm-thumb err__ncm-thumb--none">${ICONS.music}</span>`;
+        el.append(`<div class="err__ncm-row" data-id="${s.id}">
+            ${thumb}
+            <div class="err__ncm-meta">
+                <div class="err__ncm-name">${escapeHtml(s.name)}</div>
+                <div class="err__ncm-artist">${escapeHtml(s.artist || '未知艺术家')}</div>
+            </div>
+            <span class="err__ncm-dur">${fmtDur(s.duration)}</span>
+        </div>`);
+    });
+}
+
+async function ncmResolveUrl(songId) {
+    for (const level of ['exhigh', 'standard']) {
+        const d = await ncmFetch(`/song/url/v1?id=${songId}&level=${level}`);
+        const list = (d && d.data) || [];
+        const url = list[0] && list[0].url;
+        if (url) return url;
+    }
+    return null;
+}
+
+async function ncmPlaySong(song) {
+    let idx = settings.songs.findIndex(s => s.source === 'netease' && s.ncmId === song.id);
+    if (idx < 0) {
+        settings.songs.push({
+            id: uid(),
+            title: song.name,
+            artist: song.artist,
+            cover: song.cover,
+            duration: song.duration,
+            source: 'netease',
+            ncmId: song.id,
+        });
+        idx = settings.songs.length - 1;
+        saveSettings();
+    }
+    renderAll();
+    await playIndex(idx);
+}
+
+// —— 歌词 ——
+function parseLrc(lrc) {
+    const lines = [];
+    (lrc || '').split(/\r?\n/).forEach(raw => {
+        const m = raw.match(/\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\](.*)/);
+        if (!m) return;
+        const frac = m[3] || '0';
+        const div = frac.length === 3 ? 1000 : frac.length === 2 ? 100 : frac.length === 1 ? 10 : 1;
+        lines.push({ time: (+m[1]) * 60 + (+m[2]) + (+frac) / div, text: m[4].trim() });
+    });
+    lines.sort((a, b) => a.time - b.time);
+    return lines;
+}
+
+async function ncmLoadLyric(songId) {
+    try {
+        const d = await ncmFetch(`/lyric?id=${songId}`);
+        ncm.lyricLines = parseLrc(d && d.lrc && d.lrc.lyric);
+        ncm.lyricTrans = parseLrc(d && d.tlyric && d.tlyric.lyric);
+    } catch (e) {
+        ncm.lyricLines = []; ncm.lyricTrans = [];
+    }
+    renderLyric();
+}
+
+function renderLyric() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const wrap = panel.find('.err__lyric');
+    const has = ncm.lyricLines.length > 0;
+    wrap.toggle(has);
+    if (!has) { panel.find('.err__lyric-line').text(''); panel.find('.err__lyric-trans').text(''); return; }
+    updateLyricTime(audio.currentTime || 0);
+}
+
+function updateLyricTime(t) {
+    const panel = $('#st-error');
+    if (!panel.length || !ncm.lyricLines.length) return;
+    let idx = -1;
+    for (let i = 0; i < ncm.lyricLines.length; i++) {
+        if (ncm.lyricLines[i].time <= t) idx = i; else break;
+    }
+    if (idx < 0) idx = 0;
+    panel.find('.err__lyric-line').text(ncm.lyricLines[idx].text || '…');
+    let trans = '';
+    for (const tr of ncm.lyricTrans) {
+        if (tr.time <= t) trans = tr.text; else break;
+    }
+    panel.find('.err__lyric-trans').text(trans);
+}
+
+// —— 扫码登录 ——
+async function ncmLogin() {
+    const modal = $('#st-error .err__qr-modal');
+    if (!modal.length) return;
+    const statusEl = modal.find('.err__qr-status');
+    const imgEl = modal.find('.err__qr-img');
+    modal.show();
+    imgEl.attr('src', '').hide();
+    statusEl.text('正在获取二维码…');
+    try {
+        const k = await ncmFetch(`/login/qr/key?timestamp=${Date.now()}`);
+        if (!k) { modal.hide(); return; }
+        const key = (k.data && k.data.unikey) || k.unikey || k.data;
+        if (!key) { statusEl.text('获取二维码失败'); return; }
+        ncm.qrKey = key;
+
+        const c = await ncmFetch(`/login/qr/create?key=${encodeURIComponent(key)}&qrimg=true&timestamp=${Date.now()}`);
+        const qrimg = (c && c.data && c.data.qrimg) || '';
+        if (!qrimg) { statusEl.text('生成二维码失败'); return; }
+        imgEl.attr('src', 'data:image/png;base64,' + qrimg).show();
+        statusEl.text('请用网易云音乐 App 扫码登录');
+
+        clearInterval(ncm.qrTimer);
+        ncm.qrTimer = setInterval(ncmQrPoll, 3000);
+    } catch (e) {
+        statusEl.text('连接 API 失败，请检查地址');
+    }
+}
+
+async function ncmQrPoll() {
+    if (!ncm.qrKey) return;
+    try {
+        const s = await ncmFetch(`/login/qr/check?key=${encodeURIComponent(ncm.qrKey)}&timestamp=${Date.now()}`);
+        const code = s && s.code;
+        const modal = $('#st-error .err__qr-modal');
+        const statusEl = modal.find('.err__qr-status');
+        const imgEl = modal.find('.err__qr-img');
+        if (code === 803) {
+            clearInterval(ncm.qrTimer); ncm.qrTimer = null;
+            settings.neteaseLoggedIn = true;
+            saveSettings();
+            syncNcmLoginUi();
+            statusEl.text('登录成功：' + (s.nickname || '网易云'));
+            toastr.success('网易云登录成功');
+            setTimeout(ncmQrClose, 1200);
+        } else if (code === 800) {
+            clearInterval(ncm.qrTimer); ncm.qrTimer = null;
+            statusEl.text('二维码已过期，请重新扫码');
+            imgEl.hide();
+        } else if (code === 802) {
+            statusEl.text('已扫码，请在手机上确认');
+        } else if (code === 801) {
+            statusEl.text('等待扫码…');
+        }
+    } catch (e) { /* 网络抖动忽略，下轮再试 */ }
+}
+
+function ncmQrClose() {
+    clearInterval(ncm.qrTimer); ncm.qrTimer = null;
+    ncm.qrKey = '';
+    const modal = $('#st-error .err__qr-modal');
+    if (modal.length) modal.hide();
+}
+
+function syncNcmLoginUi() {
+    const btn = $('#st-error .err__ncm-login');
+    if (!btn.length) return;
+    btn.toggleClass('is-logged', !!settings.neteaseLoggedIn)
+       .attr('title', settings.neteaseLoggedIn ? '网易云已登录（点击重新扫码）' : '扫码登录网易云');
+}
+
 // ---------------- 渲染 ----------------
 function renderControls() {
     const panel = $('#st-error');
@@ -313,7 +545,7 @@ function renderList() {
                 <div class="err__row-title">${escapeHtml(s.title)}</div>
                 <div class="err__row-artist">${escapeHtml(s.artist || '未知艺术家')}</div>
             </div>
-            <span class="err__row-src">${s.source === 'local' ? ICONS.folder : ICONS.link}</span>
+            <span class="err__row-src">${s.source === 'local' ? ICONS.folder : s.source === 'netease' ? ICONS.cloud : ICONS.link}</span>
             <span class="err__row-dur">${fmtDur(s.duration)}</span>
             <button type="button" class="err__row-del" data-id="${s.id}" title="删除">${ICONS.trash}</button>
         </div>`);
@@ -355,6 +587,10 @@ function buildPanel() {
             <div class="err__now-title">未在播放</div>
             <div class="err__now-artist">添加歌曲开始播放</div>
           </div>
+          <div class="err__lyric" style="display:none">
+            <div class="err__lyric-line"></div>
+            <div class="err__lyric-trans"></div>
+          </div>
           <div class="err__progress">
             <span class="err__now-time">00:00</span>
             <input type="range" class="err__seek" min="0" max="0" step="0.1" value="0">
@@ -377,6 +613,19 @@ function buildPanel() {
             <span class="err__label">播放列表</span>
             <span class="err__count">0 首</span>
           </div>
+          <div class="err__ncm">
+            <div class="err__ncm-bar">
+              <input type="text" class="err__ncm-input" placeholder="搜索网易云歌曲">
+              <button type="button" class="err__ncm-search" title="搜索">${ICONS.search}</button>
+              <button type="button" class="err__ncm-login" title="扫码登录网易云">${ICONS.qr}</button>
+              <button type="button" class="err__ncm-gear" title="API 设置">${ICONS.gear}</button>
+            </div>
+            <div class="err__ncm-settings" style="display:none">
+              <input type="text" class="err__ncm-api" placeholder="网易云 API 地址，如 http://127.0.0.1:3000">
+              <button type="button" class="err__ncm-save">保存</button>
+            </div>
+            <div class="err__ncm-results"></div>
+          </div>
           <div class="err__add-row">
             <input type="text" class="err__url-input" placeholder="粘贴音频直链（.mp3/.m4a/…）">
             <button type="button" class="err__add-url" title="添加直链">${ICONS.plus}</button>
@@ -386,6 +635,17 @@ function buildPanel() {
           <div class="err__list"></div>
         </div>
       </div>
+
+      <div class="err__qr-modal" style="display:none">
+        <div class="err__qr-box">
+          <div class="err__qr-head">
+            <span>扫码登录网易云</span>
+            <button type="button" class="err__qr-close" title="关闭">${ICONS.close}</button>
+          </div>
+          <img class="err__qr-img" alt="二维码" style="display:none">
+          <div class="err__qr-status"></div>
+        </div>
+      </div>
     </div>`;
     $('body').append(html);
     bindPanelEvents();
@@ -393,6 +653,9 @@ function buildPanel() {
 
 function bindPanelEvents() {
     const panel = $('#st-error');
+
+    panel.find('.err__ncm-api').val(settings.neteaseApi || '');
+    syncNcmLoginUi();
 
     panel.find('.err__close').on('click', () => togglePanel(false));
     panel.find('.err__play-toggle').on('click', togglePlay);
@@ -432,6 +695,28 @@ function bindPanelEvents() {
         if (this.files && this.files.length) addLocalFiles(Array.from(this.files));
         this.value = '';
     });
+
+    // 网易云
+    panel.find('.err__ncm-search').on('click', () => ncmSearch(panel.find('.err__ncm-input').val()));
+    panel.find('.err__ncm-input').on('keydown', (e) => { if (e.key === 'Enter') ncmSearch(panel.find('.err__ncm-input').val()); });
+    panel.find('.err__ncm-gear').on('click', () => {
+        const settingsRow = panel.find('.err__ncm-settings');
+        panel.find('.err__ncm-api').val(settings.neteaseApi || '');
+        settingsRow.toggle();
+    });
+    panel.find('.err__ncm-save').on('click', () => {
+        settings.neteaseApi = panel.find('.err__ncm-api').val().trim();
+        saveSettings();
+        panel.find('.err__ncm-settings').hide();
+        toastr.success('网易云 API 地址已保存');
+    });
+    panel.find('.err__ncm-login').on('click', ncmLogin);
+    panel.find('.err__ncm-results').on('click', '.err__ncm-row', function () {
+        const song = ncm.results.find(s => String(s.id) === String($(this).data('id')));
+        if (song) ncmPlaySong(song);
+    });
+    panel.find('.err__qr-close').on('click', ncmQrClose);
+    panel.find('.err__qr-modal').on('click', function (e) { if (e.target === this) ncmQrClose(); });
 
     // 进度 / 音量
     let seeking = false;
@@ -511,6 +796,7 @@ jQuery(async () => {
             p.find('.err__seek').attr('max', d).val(audio.currentTime);
         }
         p.find('.err__now-time').text(fmtDur(audio.currentTime));
+        updateLyricTime(audio.currentTime);
     });
     audio.addEventListener('loadedmetadata', () => {
         const s = currentSong();

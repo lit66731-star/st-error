@@ -4,9 +4,27 @@ SillyTavern 第三方扩展，界面仿**网易云音乐**，配色沿用 Serend
 
 - 唱盘 + 唱针 + 播放列表 + 底部控制（播放/暂停、上一首/下一首、进度、音量）
 - 循环模式：列表循环 / 单曲循环 / 随机播放
-- 歌源：**本地音频文件**（存入浏览器 IndexedDB 持久保存）+ **直链 URL**
+- 歌源：**网易云**（搜索 + 扫码登录，需自建 NeteaseCloudMusicApi）+ **本地音频文件**（IndexedDB 持久保存）+ **直链 URL**
+- 同步歌词（当前句 + 翻译）
 - 全屏面板，自适应手机屏幕（`100dvw/100dvh`，规避酒馆移动端 `body: fixed + overflow:hidden` 的高度失效问题）
-- 顶栏右侧 `#top-settings-holder` 注入音乐按钮
+- 顶栏右侧按钮群注入音乐按钮
+
+## 网易云接入（可选）
+
+插件本身不内置网易云接口，需要一个自建的 **NeteaseCloudMusicApi** 服务当后端（登录态存在服务端，能拿到 320k 音质；会员歌视账号权益）：
+
+1. 在服务器上跑 NeteaseCloudMusicApi（Node，开源项目，与 error 插件无代码耦合）：
+   ```bash
+   # Docker 方式（推荐）
+   docker run -d --name ncm -p 3000:3000 binaryify/netease_cloud_music_api
+   # 或 Node 方式
+   git clone https://github.com/Binaryify/NeteaseCloudMusicApi && cd NeteaseCloudMusicApi && npm i && node app.js
+   ```
+2. 打开 error 面板 → 网易云栏点「齿轮」→ 填 API 地址（如 `http://你的服务器:3000`）→ 保存。
+3. 点「扫码」按钮，用网易云音乐 App 扫码登录（登录态保存在服务端，浏览器不接触 cookie）。
+4. 搜索、点歌即可；播放地址按需解析，5 分钟内复用缓存。
+
+> 注意：把 API 端口暴露到公网前，建议用 nginx 反代到同源路径并加访问控制，避免他人滥用你的登录态。
 
 ## 安装
 
@@ -22,5 +40,6 @@ SillyTavern 第三方扩展，界面仿**网易云音乐**，配色沿用 Serend
 
 ## 更新记录
 
+- **1.1.0**：新增网易云源——搜索、扫码登录（NeteaseCloudMusicApi 后端）、320k 优先解析、同步歌词（当前句 + 翻译）；播放列表来源标识区分本地/直链/网易云。
 - **1.0.1**：修复顶栏按钮位置——按钮改为与酒馆其它顶栏按钮同构（`.drawer` + `.drawer-icon`），并插入到按钮群 `#ai-config-button` 之后，不再被挤到右上角。
 - **1.0.0**：首个版本——网易云风格界面（唱盘/唱针/歌单/控制条）、本地文件 + 直链 URL 播放、三种循环模式、手机全屏自适应、顶栏按钮。
