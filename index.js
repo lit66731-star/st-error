@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.1.0'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.1.1'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -427,7 +427,9 @@ async function ncmLogin() {
         const c = await ncmFetch(`/login/qr/create?key=${encodeURIComponent(key)}&qrimg=true&timestamp=${Date.now()}`);
         const qrimg = (c && c.data && c.data.qrimg) || '';
         if (!qrimg) { statusEl.text('生成二维码失败'); return; }
-        imgEl.attr('src', 'data:image/png;base64,' + qrimg).show();
+        // 部分版本返回的 qrimg 已带 data: 前缀，未带的才补上
+        const src = qrimg.startsWith('data:') ? qrimg : 'data:image/png;base64,' + qrimg;
+        imgEl.attr('src', src).show();
         statusEl.text('请用网易云音乐 App 扫码登录');
 
         clearInterval(ncm.qrTimer);
