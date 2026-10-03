@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.2.0'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.2.1'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -46,6 +46,9 @@ let settings = {
     neteaseApi: '',     // 网易云 API 地址（NeteaseCloudMusicApi），如 http://127.0.0.1:3000
     neteaseLoggedIn: false,
     neteaseCookie: '',  // 网易云 MUSIC_U cookie（可信设备登录，绕开机房 IP 的风控）
+    duoLore: null,          // 用户自定义氛围文案数组；null=用内置默认
+    duoCharAvatar: '',      // 自定义角色头像（dataURL，空=用酒馆角色头像）
+    duoUserAvatar: '',      // 自定义你的头像（dataURL，空=用酒馆用户头像）
 };
 
 const ncm = {
@@ -60,15 +63,36 @@ let audio = new Audio();
 let playing = false;
 let currentObjectUrl = null; // 本地文件播放时的 object URL，切换时 revoke
 
-// ---------------- 一起听（双头像 + AI 点评） ----------------
+// ---------------- 一起听（双头像 + 内置氛围对话） ----------------
+const DUO_DEFAULT_LORE = [
+    '一起听歌的感觉真好', '耳机分你一半', '这首歌好有感觉', '前奏一响就沦陷了',
+    '♪ 好听到想循环', '和喜欢的人听喜欢的歌', '这一刻想按下暂停', '循环一整天都不腻',
+    '今晚的 BGM 就交给你了', '嘘，用心听', '想把这句歌词唱给你', '有点上头了',
+];
+
 let duoPersonas = null;   // 延迟加载 personas.js 拿 user_avatar
-let duoCommentSeq = 0;    // 切歌时递增，丢弃过期的点评结果
-let duoCommentTimer = null;
+let duoLoreTimer = null;  // 播放时轮换氛围文案
 
 function duoContext() {
     try {
         return (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
     } catch (e) { return null; }
+}
+
+function duoLoreLines() {
+    const arr = Array.isArray(settings.duoLore) ? settings.duoLore.filter(x => String(x).trim()) : DUO_DEFAULT_LORE;
+    return arr.length ? arr : DUO_DEFAULT_LORE;
+}
+
+function duoPickLine(exclude) {
+    const lines = duoLoreLines();
+    if (lines.length === 1) return lines[0];
+    let line = lines[Math.floor(Math.random() * lines.length)];
+    if (exclude != null && lines.length > 1) {
+        let guard = 0;
+        while (line === exclude && guard++ < 10) line = lines[Math.floor(Math.random() * lines.length)];
+    }
+    return line;
 }
 
 async function duoUserAvatar() {
@@ -101,41 +125,76 @@ function duoSetAvatar(imgEl, url) {
     }
 }
 
+function renderDuoChat() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const charLine = duoPickLine();
+    panel.find('.err__duo-bubble--char .err__duo-bubble-text').text(charLine);
+    panel.find('.err__duo-bubble--user .err__duo-bubble-text').text(duoPickLine(charLine));
+}
+
 function renderDuo() {
     const panel = $('#st-error');
     if (!panel.length) return;
     const ctx = duoContext();
     panel.find('.err__duo-name--char').text((ctx && ctx.name2) || '');
     panel.find('.err__duo-name--user').text((ctx && ctx.name1) || '你');
-    duoSetAvatar(panel.find('.err__duo-img--char'), duoCharAvatar());
-    duoUserAvatar().then(ua => duoSetAvatar(panel.find('.err__duo-img--user'), ua));
+    duoSetAvatar(panel.find('.err__duo-img--char'), settings.duoCharAvatar || duoCharAvatar());
+    const userImg = panel.find('.err__duo-img--user');
+    if (settings.duoUserAvatar) duoSetAvatar(userImg, settings.duoUserAvatar);
+    else duoUserAvatar().then(ua => duoSetAvatar(userImg, ua));
+    // 自定义头像时显示「重置」小按钮
+    panel.find('.err__duo-reset--char').toggle(!!settings.duoCharAvatar);
+    panel.find('.err__duo-reset--user').toggle(!!settings.duoUserAvatar);
+    renderDuoChat();
 }
 
-function duoComment(song) {
-    const panel = $('#st-error');
-    const ctx = duoContext();
-    if (!panel.length || !song) return;
-    const seq = ++duoCommentSeq;
-    const bubble = panel.find('.err__duo-bubble-text');
-    clearTimeout(duoCommentTimer);
-    // 切歌太频繁先等一小会，避免每首都触发生成
-    duoCommentTimer = setTimeout(async () => {
-        if (seq !== duoCommentSeq) return;
-        if (!ctx || typeof ctx.generateQuietPrompt !== 'function') {
-            bubble.text(song.title ? `正在听《${song.title}》…` : '一起听…');
-            return;
-        }
-        bubble.text('…');
+function duoStartLoreFlow() {
+    if (duoLoreTimer) return;
+    duoLoreTimer = setInterval(() => { if (playing) renderDuoChat(); }, 16000);
+}
+
+// 头像上传：等比缩到 maxSize，转 dataURL 存进 settings
+function duoResizeImage(file, maxSize) {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+            const w = Math.max(1, Math.round(img.width * scale));
+            const h = Math.max(1, Math.round(img.height * scale));
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            c.getContext('2d').drawImage(img, 0, 0, w, h);
+            URL.revokeObjectURL(url);
+            resolve(c.toDataURL('image/png'));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load')); };
+        img.src = url;
+    });
+}
+
+function duoPickAvatar(which) {
+    const input = $('<input type="file" accept="image/*">');
+    input.on('change', async function () {
+        const file = this.files && this.files[0];
+        if (!file) return;
         try {
-            const prompt = `（一起听）你们此刻正在一起听这首歌：《${song.title}》${song.artist ? '，歌手：' + song.artist : ''}。请以你的身份，用一句简短、自然的话点评这首歌或此刻的氛围。直接说台词，不要动作描写、不要反问、不要解释。`;
-            const reply = await ctx.generateQuietPrompt({ quietPrompt: prompt, trimToSentence: true });
-            if (seq !== duoCommentSeq) return;
-            const text = (reply || '').trim();
-            bubble.text(text || `正在听《${song.title}》…`);
-        } catch (e) {
-            if (seq === duoCommentSeq) bubble.text(`正在听《${song.title}》…`);
-        }
-    }, 1200);
+            const dataUrl = await duoResizeImage(file, 160);
+            if (which === 'char') settings.duoCharAvatar = dataUrl;
+            else settings.duoUserAvatar = dataUrl;
+            saveSettings();
+            renderDuo();
+        } catch (e) { toastr.error('图片处理失败'); }
+    });
+    input.trigger('click');
+}
+
+function duoResetAvatar(which) {
+    if (which === 'char') settings.duoCharAvatar = '';
+    else settings.duoUserAvatar = '';
+    saveSettings();
+    renderDuo();
 }
 
 // ---------------- 工具 ----------------
@@ -252,7 +311,8 @@ async function playIndex(i) {
         audio.src = src;
         await audio.play();
         if (s.source === 'netease') ncmLoadLyric(s.ncmId);
-        duoComment(s);
+        renderDuoChat();
+        duoStartLoreFlow();
     } catch (e) {
         toastr.warning('播放失败：' + (s.title || s.url));
     }
@@ -654,9 +714,17 @@ function buildPanel() {
       <div class="err__body">
         <div class="err__stage">
           <div class="err__duo">
+            <div class="err__duo-chat">
+              <div class="err__duo-bubble err__duo-bubble--char"><span class="err__duo-bubble-text">一起听…</span></div>
+              <div class="err__duo-bubble err__duo-bubble--user"><span class="err__duo-bubble-text">一起听…</span></div>
+            </div>
             <div class="err__duo-avatars">
               <div class="err__duo-person err__duo-person--char">
-                <span class="err__duo-avatar"><span class="err__duo-avatar-fallback">${ICONS.user}</span><img class="err__duo-img err__duo-img--char" alt="" style="display:none"></span>
+                <span class="err__duo-avatar" title="点击更换头像">
+                  <span class="err__duo-avatar-fallback">${ICONS.user}</span>
+                  <img class="err__duo-img err__duo-img--char" alt="" style="display:none">
+                  <button type="button" class="err__duo-reset err__duo-reset--char" title="恢复默认头像" style="display:none">${ICONS.close}</button>
+                </span>
                 <span class="err__duo-name err__duo-name--char"></span>
               </div>
               <div class="err__duo-link" aria-hidden="true">
@@ -666,15 +734,19 @@ function buildPanel() {
                 <span class="err__float err__float--h2">♥</span>
                 <span class="err__float err__float--n3">♪</span>
                 <span class="err__float err__float--h3">♡</span>
+                <span class="err__float err__float--n4">♪</span>
+                <span class="err__float err__float--h4">♥</span>
               </div>
               <div class="err__duo-person err__duo-person--user">
-                <span class="err__duo-avatar"><span class="err__duo-avatar-fallback">${ICONS.user}</span><img class="err__duo-img err__duo-img--user" alt="" style="display:none"></span>
+                <span class="err__duo-avatar" title="点击更换头像">
+                  <span class="err__duo-avatar-fallback">${ICONS.user}</span>
+                  <img class="err__duo-img err__duo-img--user" alt="" style="display:none">
+                  <button type="button" class="err__duo-reset err__duo-reset--user" title="恢复默认头像" style="display:none">${ICONS.close}</button>
+                </span>
                 <span class="err__duo-name err__duo-name--user">你</span>
               </div>
             </div>
-            <div class="err__duo-chat">
-              <div class="err__duo-bubble"><span class="err__duo-bubble-text">一起听…</span></div>
-            </div>
+            <button type="button" class="err__duo-lore-btn" title="编辑氛围文案">${ICONS.gear} 氛围文案</button>
           </div>
           <div class="err__now">
             <div class="err__now-title">未在播放</div>
@@ -738,6 +810,21 @@ function buildPanel() {
           </div>
           <img class="err__qr-img" alt="二维码" style="display:none">
           <div class="err__qr-status"></div>
+        </div>
+      </div>
+
+      <div class="err__lore-modal" style="display:none">
+        <div class="err__lore-box">
+          <div class="err__lore-head">
+            <span>氛围文案</span>
+            <button type="button" class="err__lore-close" title="关闭">${ICONS.close}</button>
+          </div>
+          <div class="err__lore-hint">一行一条，播放时会随机取用；留空则使用内置默认。</div>
+          <textarea class="err__lore-input" rows="12" spellcheck="false"></textarea>
+          <div class="err__lore-actions">
+            <button type="button" class="err__lore-reset">恢复默认</button>
+            <button type="button" class="err__lore-save">保存</button>
+          </div>
         </div>
       </div>
     </div>`;
@@ -814,6 +901,38 @@ function bindPanelEvents() {
     });
     panel.find('.err__qr-close').on('click', ncmQrClose);
     panel.find('.err__qr-modal').on('click', function (e) { if (e.target === this) ncmQrClose(); });
+
+    // 一起听：点头像换头像、点重置恢复默认
+    panel.find('.err__duo-avatar').on('click', function () {
+        duoPickAvatar($(this).closest('.err__duo-person').hasClass('err__duo-person--char') ? 'char' : 'user');
+    });
+    panel.find('.err__duo-reset').on('click', function (e) {
+        e.stopPropagation();
+        duoResetAvatar($(this).hasClass('err__duo-reset--char') ? 'char' : 'user');
+    });
+
+    // 一起听：氛围文案编辑
+    panel.find('.err__duo-lore-btn').on('click', function () {
+        panel.find('.err__lore-input').val(duoLoreLines().join('\n'));
+        panel.find('.err__lore-modal').show();
+    });
+    panel.find('.err__lore-close').on('click', () => panel.find('.err__lore-modal').hide());
+    panel.find('.err__lore-modal').on('click', function (e) { if (e.target === this) $(this).hide(); });
+    panel.find('.err__lore-save').on('click', function () {
+        const lines = panel.find('.err__lore-input').val().split('\n').map(s => s.trim()).filter(Boolean);
+        settings.duoLore = lines.length ? lines : null;
+        saveSettings();
+        panel.find('.err__lore-modal').hide();
+        renderDuoChat();
+        toastr.success('氛围文案已保存');
+    });
+    panel.find('.err__lore-reset').on('click', function () {
+        settings.duoLore = null;
+        saveSettings();
+        panel.find('.err__lore-input').val(DUO_DEFAULT_LORE.join('\n'));
+        renderDuoChat();
+        toastr.success('已恢复默认文案');
+    });
 
     // 进度 / 音量
     let seeking = false;
