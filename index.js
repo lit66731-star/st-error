@@ -1,721 +1,527 @@
-import { extension_settings } from '../../../extensions.js';
-import {
-    chat,
-    characters,
-    this_chid,
-    event_types,
-    eventSource,
-    saveSettingsDebounced,
-    setExtensionPrompt,
-    extension_prompt_types,
-    chat_metadata,
-    saveChatDebounced,
-    getMaxContextTokens,
-    getMaxPromptTokens,
-    updateMessageBlock,
-} from '../../../../script.js';
-import { getContext } from '../../../st-context.js';
-import { getTokenCountAsync, getTokenizerModel } from '../../../tokenizers.js';
-import { power_user } from '../../../power-user.js';
+/* ==========================================================================
+   error · 音乐播放器（SillyTavern 第三方扩展）
+   界面仿网易云音乐，配色沿用 Serendipity 的暖白 + 灰玫瑰体系。
+   歌源：本地文件（存 IndexedDB）+ 直链 URL；播放内核用 HTML5 Audio。
+   ========================================================================== */
 
 const extensionName = 'error';
+const VERSION = '1.0.0'; // 面板标题旁展示，更新时与 manifest.json 同步
 
-const WARN_THRESHOLD = 0.8; // 上下文占用超过 80% 弹窗提醒
-
-// —— 时间插件配置 ——
-const TIME_CARD_POSITION = extension_prompt_types.IN_CHAT; // 1：注入到聊天里，靠近结尾
-const TIME_CARD_DEPTH = 1;                                 // 深度 1，太深模型会忽略
-const DEFAULT_ADVANCE_MINUTES = 5;                         // AI 没输出时间块时，每轮兜底推进 5 分钟
-const START_DAY = 1;
-const START_MINUTE = 480; // 08:00
-
-const TIME_BLOCK_RE = /<time>([^<]+)<\/time>/i;
-const TIME_BLOCK_GLOBAL_RE = /<time>[^<]*<\/time>/gi;
-
-// 中文相对时间词表（分钟偏移）
-const RELATIVE_TIME = {
-    '昨天': -1440, '今天': 0, '明天': 1440,
-    '前天': -2880, '后天': 2880,
-    '刚刚': -5, '刚才': -10, '不久前': -60,
-    '前几天': -4320, '上周': -10080, '上个月': -43200, '去年': -525600,
+// ---------------- 图标（线性极简） ----------------
+const ICONS = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+    prev: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 6l-9 6 9 6z"/></svg>',
+    next: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 6l9 6-9 6z"/></svg>',
+    loopList: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l3 3-3 3"/><path d="M4 6h13a3 3 0 0 1 3 3v1"/><path d="M7 21l-3-3 3-3"/><path d="M20 18H7a3 3 0 0 1-3-3v-1"/></svg>',
+    loopOne: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l3 3-3 3"/><path d="M4 6h13a3 3 0 0 1 3 3v1"/><path d="M7 21l-3-3 3-3"/><path d="M20 18H7a3 3 0 0 1-3-3v-1"/><text x="11.4" y="13" font-size="7" stroke="none" fill="currentColor" font-family="sans-serif">1</text></svg>',
+    shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h3l9 12h6"/><path d="M21 6h-3l-4.5 6"/><path d="M3 18h3l1.8-2.4"/><path d="M17 3l3 3-3 3"/><path d="M17 15l3 3-3 3"/></svg>',
+    volume: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    music: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 18.5a3 3 0 1 1-2-2.83V6.6L18 4v10.5a3 3 0 1 1-2-2.83V7.6L9 9.3z"/></svg>',
+    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+    link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1.5 1.5"/><path d="M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1.5-1.5"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
 };
 
 // ---------------- 状态 ----------------
-let activeChar = '';         // 当前绑定角色显示名
-let editingIdx = null;       // 正在编辑时间的消息索引
-let isRealGeneration = false;// 当前是否在进行真实剧情生成（排除 quiet 调用污染上下文统计）
-let lastPromptCounted = false;// 本轮是否已用精确 prompt 统计过（决定 GENERATION_ENDED 是否兜底）
-let contextTokens = 0;
-let contextMax = 0;
-let currentModel = '';
-let contextUpdatedAt = 0;
+const LOOP_MODES = [
+    { key: 'list', title: '列表循环', icon: 'loopList' },
+    { key: 'one', title: '单曲循环', icon: 'loopOne' },
+    { key: 'shuffle', title: '随机播放', icon: 'shuffle' },
+];
 
-// ---------------- 时间轴数据模型 ----------------
-// 时间轴存在 chat_metadata（每聊天独立）；每条消息的「当时时间」存在 message.extra[extensionName]。
-// 这样时间线可以直接从消息派生，编辑/删除/swipe 后重建，也能逐条「钉住」手动修正。
-function freshTimeState() {
-    return {
-        version: 1,
-        clock: { day: START_DAY, minuteOfDay: START_MINUTE, dayLength: 1440, paused: false },
-    };
-}
+let settings = {
+    songs: [],          // { id, title, artist, source: 'url'|'local', url?, fileId?, duration? }
+    currentIndex: -1,
+    loopMode: 'list',
+    volume: 0.8,
+};
 
-function getTimeState() {
-    if (!chat_metadata || typeof chat_metadata !== 'object') return freshTimeState();
-    let s = chat_metadata[extensionName];
-    if (!s || typeof s !== 'object') {
-        s = freshTimeState();
-        chat_metadata[extensionName] = s;
-    } else {
-        if (!s.clock || typeof s.clock !== 'object') s.clock = freshTimeState().clock;
-        if (typeof s.clock.day !== 'number') s.clock.day = START_DAY;
-        if (typeof s.clock.minuteOfDay !== 'number') s.clock.minuteOfDay = START_MINUTE;
-        if (typeof s.clock.dayLength !== 'number') s.clock.dayLength = 1440;
-        if (s.clock.paused === undefined) s.clock.paused = false;
-        s.version = 1;
-    }
-    return s;
-}
-
-function saveChat() { saveChatDebounced(); }
+let audio = new Audio();
+let playing = false;
+let currentObjectUrl = null; // 本地文件播放时的 object URL，切换时 revoke
 
 // ---------------- 工具 ----------------
-function pad(n) { return String(n).padStart(2, '0'); }
-function fmtHM(minuteOfDay) {
-    const m = ((minuteOfDay % 1440) + 1440) % 1440;
-    return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
-}
-function fmtDaytime(day, minuteOfDay) {
-    return `第${day}天 ${fmtHM(minuteOfDay)}`;
-}
-function periodOfDay(minuteOfDay) {
-    const m = ((minuteOfDay % 1440) + 1440) % 1440;
-    if (m < 300) return '深夜';
-    if (m < 480) return '清晨';
-    if (m < 660) return '上午';
-    if (m < 780) return '中午';
-    if (m < 1080) return '下午';
-    if (m < 1200) return '傍晚';
-    return '夜晚';
-}
-function fmtElapsed(minutes) {
-    minutes = Math.max(0, Math.round(minutes));
-    if (minutes < 60) return minutes + '分钟';
-    if (minutes < 1440) return Math.floor(minutes / 60) + '小时' + (minutes % 60 ? (minutes % 60) + '分' : '');
-    const d = Math.floor(minutes / 1440);
-    const h = Math.floor((minutes % 1440) / 60);
-    return d + '天' + (h ? h + '小时' : '');
-}
-function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-function fmtNow(ts) {
-    const d = new Date(ts);
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function fmtDur(sec) {
+    if (sec == null || !isFinite(sec) || sec < 0) return '--:--';
+    sec = Math.floor(sec);
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
 }
 
-// ---------------- 时钟推进 / 解析 ----------------
-function advanceClock(clock, minutes) {
-    const dayLength = clock.dayLength || 1440;
-    const total = (clock.minuteOfDay || 0) + minutes;
-    clock.day = (clock.day || START_DAY) + Math.floor(total / dayLength);
-    clock.minuteOfDay = ((total % dayLength) + dayLength) % dayLength;
+const LS_KEY = 'st-error-music';
+function saveSettings() { try { localStorage.setItem(LS_KEY, JSON.stringify(settings)); } catch (e) {} }
+function loadSettings() {
+    try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (raw) {
+            const p = JSON.parse(raw);
+            settings = Object.assign(settings, p);
+            if (!Array.isArray(settings.songs)) settings.songs = [];
+        }
+    } catch (e) { settings.songs = []; }
 }
 
-// 解析 AI 输出的时间块：<time>第27天 06:50 | +10m | 北境营地</time>
-function parseTimeBlock(text) {
-    if (typeof text !== 'string') return null;
-    const m = text.match(TIME_BLOCK_RE);
-    if (!m) return null;
-    const raw = m[1].trim();
-    const parts = raw.split('|').map(s => s.trim()).filter(Boolean);
-    const seg1 = parts[0] || '';
-
-    let day = null, minuteOfDay = null;
-    const dayMatch = seg1.match(/第\s*(\d+)\s*天/);
-    if (dayMatch) day = parseInt(dayMatch[1], 10);
-    const timeMatch = seg1.match(/(\d{1,2}):(\d{2})/);
-    if (timeMatch) minuteOfDay = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
-
-    let deltaMinutes = null;
-    const deltaMatch = raw.match(/\+(\d+)\s*(天|d|h|m)/i);
-    if (deltaMatch) {
-        const v = parseInt(deltaMatch[1], 10);
-        const u = deltaMatch[2].toLowerCase();
-        deltaMinutes = (u === '天' || u === 'd') ? v * 1440 : (u === 'h' ? v * 60 : v);
-    }
-
-    let location = '';
-    if (parts.length >= 3) location = parts[2];
-    else if (parts.length === 2 && !deltaMatch) location = parts[1];
-
-    return { day, minuteOfDay, deltaMinutes, location, raw };
+// ---------------- IndexedDB（本地音频文件持久化） ----------------
+const DB_NAME = 'st-error-music';
+const DB_STORE = 'files';
+function idbOpen() {
+    return new Promise((res, rej) => {
+        if (!('indexedDB' in window)) return rej(new Error('no idb'));
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+        };
+        req.onsuccess = () => res(req.result);
+        req.onerror = () => rej(req.error);
+    });
+}
+async function idbPut(id, blob) {
+    const db = await idbOpen();
+    return new Promise((res, rej) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        tx.objectStore(DB_STORE).put(blob, id);
+        tx.oncomplete = () => res();
+        tx.onerror = () => rej(tx.error);
+    });
+}
+async function idbGet(id) {
+    const db = await idbOpen();
+    return new Promise((res, rej) => {
+        const tx = db.transaction(DB_STORE, 'readonly');
+        const rq = tx.objectStore(DB_STORE).get(id);
+        rq.onsuccess = () => res(rq.result || null);
+        rq.onerror = () => rej(rq.error);
+    });
+}
+async function idbDel(id) {
+    try {
+        const db = await idbOpen();
+        return new Promise((res, rej) => {
+            const tx = db.transaction(DB_STORE, 'readwrite');
+            tx.objectStore(DB_STORE).delete(id);
+            tx.oncomplete = () => res();
+            tx.onerror = () => rej(tx.error);
+        });
+    } catch (e) {}
 }
 
-// 从正文中移除所有 <time> 块（时间/地点已解析并绑定到 extra，无需再显示或回喂给模型）
-function stripTimeBlocks(text) {
-    if (typeof text !== 'string') return text;
-    return text.replace(TIME_BLOCK_GLOBAL_RE, '').replace(/^\s*\n/, '').trim();
-}
+// ---------------- 播放内核 ----------------
+function currentSong() { return settings.songs[settings.currentIndex]; }
 
-function applyParsed(clock, parsed) {
-    if (!parsed) { advanceClock(clock, DEFAULT_ADVANCE_MINUTES); return; }
-    if (parsed.day != null && parsed.minuteOfDay != null) {
-        clock.day = parsed.day;
-        clock.minuteOfDay = parsed.minuteOfDay;
-    } else if (parsed.deltaMinutes != null) {
-        advanceClock(clock, parsed.deltaMinutes);
-    } else if (parsed.day != null) {
-        clock.day = parsed.day;
-    } else if (parsed.minuteOfDay != null) {
-        clock.minuteOfDay = parsed.minuteOfDay;
+async function playIndex(i) {
+    const n = settings.songs.length;
+    if (!n) return;
+    if (i < 0) i = 0;
+    if (i >= n) i = n - 1;
+    settings.currentIndex = i;
+    const s = settings.songs[i];
+    saveSettings();
+
+    // 释放上一个本地文件的 object URL
+    if (currentObjectUrl) { URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
+
+    let src;
+    if (s.source === 'local') {
+        try {
+            const blob = await idbGet(s.fileId);
+            if (!blob) { toastr.warning('本地文件不存在，已跳过'); return; }
+            currentObjectUrl = URL.createObjectURL(blob);
+            src = currentObjectUrl;
+        } catch (e) { toastr.error('读取本地文件失败'); return; }
     } else {
-        advanceClock(clock, DEFAULT_ADVANCE_MINUTES);
+        src = s.url;
+    }
+
+    try {
+        audio.src = src;
+        await audio.play();
+    } catch (e) {
+        toastr.warning('播放失败：' + (s.title || s.url));
     }
 }
 
-// ---------------- 消息绑定 / 时间线重建 ----------------
-function boundTime(m) {
-    const t = m && m.extra && m.extra[extensionName];
-    return (t && typeof t.day === 'number') ? t : null;
-}
-function bindTime(m, clock, turn, pinned, location) {
-    if (!m.extra || typeof m.extra !== 'object') m.extra = {};
-    const t = { day: clock.day, minuteOfDay: clock.minuteOfDay, turn, pinned: !!pinned };
-    if (location) t.location = location;
-    m.extra[extensionName] = t;
+function togglePlay() {
+    if (!settings.songs.length) return;
+    if (playing) audio.pause();
+    else if (audio.src) audio.play().catch(() => {});
+    else playIndex(settings.currentIndex < 0 ? 0 : settings.currentIndex);
 }
 
-// 从某条消息开始重放，重建时间线（编辑/删除/swipe 后回滚）。被「钉住」的消息用其手动时间，不重算。
-function rebuildTimeline(fromIndex = 0) {
-    const state = getTimeState();
-    if (fromIndex <= 0) {
-        state.clock.day = START_DAY;
-        state.clock.minuteOfDay = START_MINUTE;
+function playPrev() {
+    if (!settings.songs.length) return;
+    const n = settings.songs.length;
+    let i = settings.currentIndex;
+    if (i < 0) i = 0; else i = (i - 1 + n) % n;
+    playIndex(i);
+}
+
+function playNext() {
+    if (!settings.songs.length) return;
+    const n = settings.songs.length;
+    if (settings.loopMode === 'shuffle' && n > 1) {
+        let j = settings.currentIndex;
+        while (j === settings.currentIndex) j = Math.floor(Math.random() * n);
+        playIndex(j);
     } else {
-        const prev = chat[fromIndex - 1];
-        const pt = boundTime(prev);
-        if (pt) { state.clock.day = pt.day; state.clock.minuteOfDay = pt.minuteOfDay; }
-        else { state.clock.day = START_DAY; state.clock.minuteOfDay = START_MINUTE; }
+        playIndex((settings.currentIndex + 1) % n);
     }
+}
 
-    for (let i = fromIndex; i < chat.length; i++) {
-        const m = chat[i];
-        if (!m || m.is_system) continue;
-        if (m.is_user) { bindTime(m, state.clock, i); continue; }
-        const existing = boundTime(m);
-        if (existing) {
-            // 已有时间（自动绑定或钉住），沿用，不重算
-            state.clock.day = existing.day;
-            state.clock.minuteOfDay = existing.minuteOfDay;
-            existing.turn = i;
+function onEnded() {
+    const n = settings.songs.length;
+    if (!n) return;
+    if (settings.loopMode === 'one') { playIndex(settings.currentIndex); }
+    else playNext(); // list / shuffle 都走这里
+}
+
+function cycleLoopMode() {
+    const idx = LOOP_MODES.findIndex(m => m.key === settings.loopMode);
+    settings.loopMode = LOOP_MODES[(idx + 1) % LOOP_MODES.length].key;
+    saveSettings();
+    renderControls();
+}
+
+function setVolume(v) {
+    settings.volume = Math.max(0, Math.min(1, v));
+    audio.volume = settings.volume;
+    saveSettings();
+    $('#st-error .err__vol-input').val(Math.round(settings.volume * 100));
+}
+
+// ---------------- 歌单操作 ----------------
+async function addUrlSong(url, title) {
+    url = (url || '').trim();
+    if (!url) return;
+    title = (title || '').trim() || url.split('/').pop().split('?')[0].replace(/\.[a-z0-9]+$/i, '') || '未命名';
+    settings.songs.push({ id: uid(), title, artist: '', source: 'url', url, duration: null });
+    saveSettings();
+    renderAll();
+}
+
+async function addLocalFiles(files) {
+    for (const f of files) {
+        const id = uid();
+        try {
+            await idbPut(id, f);
+        } catch (e) {
+            toastr.error('保存本地文件失败（浏览器可能不支持 IndexedDB）');
+            continue;
+        }
+        const name = f.name.replace(/\.[a-z0-9]+$/i, '');
+        settings.songs.push({ id, title: name, artist: '', source: 'local', fileId: id, duration: null });
+    }
+    saveSettings();
+    renderAll();
+}
+
+async function removeSong(id) {
+    const idx = settings.songs.findIndex(s => s.id === id);
+    if (idx < 0) return;
+    const s = settings.songs[idx];
+    const wasCurrent = idx === settings.currentIndex;
+
+    if (s.source === 'local') await idbDel(s.fileId);
+
+    settings.songs.splice(idx, 1);
+    if (wasCurrent) {
+        if (currentObjectUrl) { URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
+        audio.pause();
+        audio.removeAttribute('src');
+        playing = false;
+        if (settings.songs.length) {
+            settings.currentIndex = Math.min(idx, settings.songs.length - 1);
+            playIndex(settings.currentIndex);
         } else {
-            const parsed = parseTimeBlock(m.mes);
-            applyParsed(state.clock, parsed);
-            bindTime(m, state.clock, i, false, parsed && parsed.location);
+            settings.currentIndex = -1;
         }
-        // 从正文移除 <time> 块（时间与地点已绑定到 extra，正文无需保留）
-        const stripped = stripTimeBlocks(m.mes);
-        if (stripped !== m.mes) m.mes = stripped;
+    } else if (idx < settings.currentIndex) {
+        settings.currentIndex -= 1;
     }
-    saveChat();
+    saveSettings();
+    renderAll();
 }
 
-// 钉住某条消息的时间，并从它开始重算后续
-function pinMessageTime(index, day, minuteOfDay) {
-    const m = chat[index];
-    if (!m) return;
-    if (!m.extra || typeof m.extra !== 'object') m.extra = {};
-    const prev = boundTime(m);
-    m.extra[extensionName] = { day, minuteOfDay, turn: index, pinned: true, location: prev && prev.location ? prev.location : '' };
-    rebuildTimeline(index + 1);
-    updateTimeInjection();
-    renderTime();
-    setStatus('已钉住该条消息时间：' + fmtDaytime(day, minuteOfDay) + '，后续已重算');
+// ---------------- 渲染 ----------------
+function renderControls() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const m = LOOP_MODES.find(x => x.key === settings.loopMode) || LOOP_MODES[0];
+    panel.find('.err__loop').attr('title', m.title).html(ICONS[m.icon]);
+    panel.find('.err__play-toggle').html(playing ? ICONS.pause : ICONS.play);
+    panel.find('.err__disc').toggleClass('is-playing', playing);
+    panel.find('.err__needle').toggleClass('is-on', playing);
 }
 
-// ---------------- 时间卡（每轮注入） ----------------
-// 最近事件从最近的 AI 消息派生（不再单独存事件表）
-function recentEvents(n = 3) {
-    const out = [];
-    for (let i = chat.length - 1; i >= 0 && out.length < n; i--) {
-        const m = chat[i];
-        if (!m || m.is_system || m.is_user) continue;
-        const t = boundTime(m);
-        if (!t) continue;
-        const summary = (m.mes || '').replace(TIME_BLOCK_GLOBAL_RE, '').trim().slice(0, 40);
-        out.push({ day: t.day, minuteOfDay: t.minuteOfDay, location: t.location || '', summary });
-    }
-    return out.reverse();
-}
-
-function buildTimeCard(state) {
-    const c = state.clock;
-    const lines = [];
-    lines.push('【权威时间轴】');
-    lines.push(`当前世界时间：${fmtDaytime(c.day, c.minuteOfDay)}（${periodOfDay(c.minuteOfDay)}）` + (c.paused ? '【时间已暂停】' : ''));
-
-    const recent = recentEvents();
-    if (recent.length) {
-        const last = recent[recent.length - 1];
-        const elapsed = (c.day - last.day) * c.dayLength + (c.minuteOfDay - last.minuteOfDay);
-        if (elapsed > 0) lines.push(`上次场景结束：${fmtDaytime(last.day, last.minuteOfDay)}（已过 ${fmtElapsed(elapsed)}）`);
-        lines.push('最近事件：');
-        for (const e of recent) {
-            const loc = e.location ? ` · ${e.location}` : '';
-            const sum = e.summary ? ` ${e.summary}` : '';
-            lines.push(`- ${fmtDaytime(e.day, e.minuteOfDay)}${loc}${sum}`);
+function renderNow() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const s = currentSong();
+    const titleEl = panel.find('.err__now-title');
+    const artistEl = panel.find('.err__now-artist');
+    const discCover = panel.find('.err__disc-cover');
+    const discNote = panel.find('.err__disc-note');
+    if (s) {
+        titleEl.text(s.title);
+        artistEl.text(s.artist || '未知艺术家');
+        if (s.cover) {
+            discCover.css('background-image', `url("${s.cover.replace(/"/g, '\\"')}")`).show();
+            discNote.hide();
+        } else {
+            discCover.css('background-image', '').hide();
+            discNote.show();
         }
+        panel.find('.err__now-time').text(fmtDur(audio.currentTime || 0));
+        panel.find('.err__now-dur').text(fmtDur(s.duration));
+    } else {
+        titleEl.text('未在播放');
+        artistEl.text('添加歌曲开始播放');
+        discCover.css('background-image', '').hide();
+        discNote.show();
+        panel.find('.err__now-time').text('00:00');
+        panel.find('.err__now-dur').text('--:--');
     }
-
-    lines.push('');
-    lines.push('规则：');
-    lines.push('1. 引用过去的事件必须用绝对时间（第X天），禁止把超过1天前的事称为「昨天」。');
-    lines.push('2. 不确定时写「第X天」或「数日前」。');
-    lines.push('3. 回复开头输出时间块：<time>第X天 HH:MM | +时长 | 地点</time>；只是推进时间就写如 <time>+5m</time>。');
-    lines.push('4. 若与时间轴冲突，以本时间轴为准。');
-
-    return lines.join('\n');
 }
 
-function updateTimeInjection() {
-    const state = getTimeState();
-    setExtensionPrompt('error_time', buildTimeCard(state), TIME_CARD_POSITION, TIME_CARD_DEPTH);
-}
-
-// ---------------- 相对时间校验 ----------------
-function computeConflicts() {
-    const out = [];
-    const last = chat[chat.length - 1];
-    if (!last || last.is_user || last.is_system) return out;
-    const state = getTimeState();
-    const text = last.mes || '';
-    for (const [word, offset] of Object.entries(RELATIVE_TIME)) {
-        if (!text.includes(word)) continue;
-        const implied = state.clock.day + offset / 1440;
-        out.push({ word, implied });
-    }
-    return out;
-}
-
-// ---------------- 时间 UI 渲染 ----------------
-function renderTime() {
-    const state = getTimeState();
-    const el = $('#error_container .st-err__clock');
-    if (el.length) {
-        el.html(`${fmtDaytime(state.clock.day, state.clock.minuteOfDay)}<span class="st-err__clock-per">${periodOfDay(state.clock.minuteOfDay)}</span>`);
-        el.toggleClass('is-paused', !!state.clock.paused);
-    }
-    const toggle = $('#error_container .st-err__time-toggle');
-    if (toggle.length) toggle.prop('checked', !state.clock.paused);
-
-    renderTimeline();
-    renderConflicts();
-}
-
-function renderTimeline() {
-    const box = $('#error_container .st-err__events');
-    if (!box.length) return;
-    const rows = [];
-    for (let i = 0; i < chat.length; i++) {
-        const m = chat[i];
-        if (!m || m.is_system) continue;
-        const t = boundTime(m);
-        if (!t) continue;
-        const who = m.is_user ? '我' : (m.name || 'AI');
-        const loc = t.location || '';
-        const text = (m.mes || '').replace(TIME_BLOCK_GLOBAL_RE, '').trim().slice(0, 40);
-        const pinnedMark = t.pinned ? ' <span class="st-err__ev-pin">📌</span>' : '';
-        rows.push(`<div class="st-err__ev">
-            <span class="st-err__ev-t">${fmtDaytime(t.day, t.minuteOfDay)}</span>
-            <span class="st-err__ev-who">${escapeHtml(who)}</span>
-            ${loc ? `<span class="st-err__ev-loc">${escapeHtml(loc)}</span>` : ''}
-            ${text ? `<span class="st-err__ev-sum">${escapeHtml(text)}</span>` : ''}
-            ${pinnedMark}
-            <button type="button" class="st-err__ev-edit" data-idx="${i}" title="修改这条消息的时间">✎</button>
+function renderList() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const list = panel.find('.err__list');
+    list.empty();
+    if (!settings.songs.length) {
+        list.append(`<div class="err__empty">
+            <div class="err__empty-icon">${ICONS.music}</div>
+            <div class="err__empty-title">歌单还是空的</div>
+            <div class="err__empty-sub">粘贴音频直链，或选择本地音频文件加入</div>
         </div>`);
-    }
-    box.html(rows.length ? rows.join('') : '<div class="st-err__empty">暂无时间线。发消息后自动生成。</div>');
-}
-
-function renderConflicts() {
-    const box = $('#error_container .st-err__conflicts');
-    if (!box.length) return;
-    const list = computeConflicts();
-    box.html(list.map(c => `<div class="st-err__conflict">⚠ 检测到「${escapeHtml(c.word)}」，约对应第${Math.round(c.implied)}天，请核对时间线</div>`).join(''));
-}
-
-// ---------------- 上下文用量监控 ----------------
-function getContextLimit() {
-    try {
-        // 实际可用 prompt 上限 = 上下文窗口 − 回复长度（不同模型/API 各不同）
-        let max = Number(getMaxPromptTokens()) || 0;
-        if (max <= 0) max = Number(getMaxContextTokens()) || 0;
-        return max;
-    } catch (e) {
-        return Number(getContext().maxContext) || 0;
-    }
-}
-function getCurrentModelName() {
-    try { return String(getTokenizerModel() || '').trim(); } catch (e) { return ''; }
-}
-
-async function refreshContextUsage(promptText, label) {
-    if (typeof promptText !== 'string' || !promptText) return;
-    try {
-        const tokens = await getTokenCountAsync(promptText, power_user.token_padding);
-        contextTokens = tokens;
-        contextMax = getContextLimit();
-        currentModel = getCurrentModelName();
-        contextUpdatedAt = Date.now();
-        renderContext();
-        checkContextWarn();
-        setStatus('上下文已统计' + (label ? '（' + label + '）' : '') + '：' + tokens + ' / ' + contextMax + ' tokens' + (currentModel ? '（模型 ' + currentModel + '）' : ''));
-    } catch (e) {
-        console.error('[Error] 上下文统计失败：', e);
-        setStatus('上下文统计失败，请按 F12 查看控制台错误');
-    }
-}
-
-function countChatText() {
-    if (!Array.isArray(chat)) return;
-    const text = chat.map(m => (m && typeof m.mes === 'string' ? m.mes : '')).join('\n');
-    if (text.trim()) refreshContextUsage(text, '聊天文本估算');
-}
-
-function checkContextWarn() {
-    if (!contextMax) return;
-    const ratio = contextTokens / contextMax;
-    if (ratio >= WARN_THRESHOLD) {
-        toastr.warning(
-            '上下文用量已达 ' + Math.round(ratio * 100) + '%（' + contextTokens + ' / ' + contextMax + ' tokens），接近上限，模型可能开始遗忘早期内容。',
-            undefined, { timeOut: 6000 },
-        );
-    }
-}
-
-function setStatus(text) {
-    const el = $('#error_container .st-err__status');
-    if (el.length) el.text(text);
-}
-
-function renderContext() {
-    const box = $('#error_container .st-err__context');
-    if (!box.length) return;
-    if (contextMax && !currentModel) currentModel = getCurrentModelName();
-    if (!contextMax || !contextUpdatedAt) {
-        box.html('<div class="st-err__empty">暂无数据。发送一条消息后自动统计（也可点下方「立即统计」）。</div>');
         return;
     }
-    const ratio = contextMax ? Math.min(1, contextTokens / contextMax) : 0;
-    const pct = Math.round((contextTokens / contextMax) * 100);
-    const color = ratio >= 0.9 ? '#d9534f' : (ratio >= WARN_THRESHOLD ? '#f0ad4e' : '#4caf50');
-    box.html(`
-        <div class="st-err__stat">
-            <span class="st-err__stat-num">${contextTokens}</span>
-            <span class="st-err__stat-sep">/</span>
-            <span class="st-err__stat-max">${contextMax}</span>
-            <span class="st-err__stat-unit">tokens</span>
-            <span class="st-err__stat-pct" style="color:${color}">${pct}%</span>
-        </div>
-        <div class="st-err__bar"><div class="st-err__bar-fill" style="width:${Math.round(ratio * 100)}%;background:${color}"></div></div>
-        <div class="st-err__stat-time">最近统计：${fmtNow(contextUpdatedAt)}${currentModel ? ' · 模型 ' + escapeHtml(currentModel) : ''}</div>
-    `);
+    settings.songs.forEach((s, i) => {
+        const isCur = i === settings.currentIndex;
+        const isPlaying = isCur && playing;
+        const idxHtml = isPlaying
+            ? '<span class="err__eq"><i></i><i></i><i></i></span>'
+            : `<span class="err__row-idx">${String(i + 1).padStart(2, '0')}</span>`;
+        list.append(`<div class="err__row ${isCur ? 'is-current' : ''}" data-id="${s.id}">
+            <span class="err__row-idxwrap">${idxHtml}</span>
+            <div class="err__row-main">
+                <div class="err__row-title">${escapeHtml(s.title)}</div>
+                <div class="err__row-artist">${escapeHtml(s.artist || '未知艺术家')}</div>
+            </div>
+            <span class="err__row-src">${s.source === 'local' ? ICONS.folder : ICONS.link}</span>
+            <span class="err__row-dur">${fmtDur(s.duration)}</span>
+            <button type="button" class="err__row-del" data-id="${s.id}" title="删除">${ICONS.trash}</button>
+        </div>`);
+    });
 }
 
-function renderCharBinding() {
-    const el = $('#error_container .st-err__char');
-    if (el.length) el.text(activeChar ? ('绑定角色：' + activeChar) : '未绑定角色');
+function renderAll() {
+    renderList();
+    renderNow();
+    renderControls();
+    const panel = $('#st-error');
+    if (panel.length) panel.find('.err__count').text(settings.songs.length + ' 首');
 }
 
-// ---------------- 设置面板 ----------------
-function buildSettingsPanel() {
-    if ($('#error_container').length) return;
+// ---------------- 面板 ----------------
+function buildPanel() {
+    if ($('#st-error').length) return;
     const html = `
-    <div id="error_container" class="extension_container">
-      <div class="inline-drawer">
-        <div class="inline-drawer-toggle inline-drawer-header">
-          <b>Error</b>
-          <span class="st-err__char"></span>
-          <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+    <div id="st-error" class="err" style="display:none">
+      <div class="err__head">
+        <div class="err__brand">
+          <span class="err__title">error</span>
+          <span class="err__version">v${VERSION}</span>
         </div>
-        <div class="inline-drawer-content" style="display:none">
-          <div class="st-err__tabs">
-            <button type="button" class="st-err__tab is-active" data-tab="context">上下文</button>
-            <button type="button" class="st-err__tab" data-tab="time">时间</button>
+        <button type="button" class="err__close" title="关闭">${ICONS.close}</button>
+      </div>
+
+      <div class="err__body">
+        <div class="err__stage">
+          <div class="err__disc-wrap">
+            <div class="err__needle"><span class="err__needle-pivot"></span><span class="err__needle-arm"></span></div>
+            <div class="err__disc">
+              <div class="err__disc-cover" style="display:none"></div>
+              <div class="err__disc-note">${ICONS.music}</div>
+              <div class="err__disc-center"></div>
+            </div>
           </div>
-
-          <div class="st-err__pane" data-pane="context">
-            <div class="st-err__label">上下文用量</div>
-            <div class="st-err__context"></div>
-            <button type="button" class="st-err__time-extract st-err__ctx-count">立即统计</button>
-            <div class="st-err__hint">每次生成后自动统计当前 prompt 占用；上限按当前模型/API 的「可用上下文」（上下文窗口 − 回复长度）动态取，切换模型会自动变，超过 ${Math.round(WARN_THRESHOLD * 100)}% 弹窗提醒，防止溢出失忆。</div>
+          <div class="err__now">
+            <div class="err__now-title">未在播放</div>
+            <div class="err__now-artist">添加歌曲开始播放</div>
           </div>
-
-          <div class="st-err__pane" data-pane="time" style="display:none">
-            <div class="st-err__toolbar">
-              <span class="st-err__label">当前时间</span>
-              <label class="st-err__switch"><input type="checkbox" class="st-err__time-toggle"><span class="st-err__switch-slider"></span></label>
-              <span class="st-err__hint-inline">自动追踪</span>
-            </div>
-            <div class="st-err__clock"></div>
-
-            <div class="st-err__adv-row">
-              <button type="button" class="st-err__adv" data-min="5">+5m</button>
-              <button type="button" class="st-err__adv" data-min="10">+10m</button>
-              <button type="button" class="st-err__adv" data-min="60">+1h</button>
-              <button type="button" class="st-err__adv" data-min="1440">+1d</button>
-            </div>
-
-            <div class="st-err__add-row">
-              <input type="text" class="st-err__time-input" placeholder="手动设定当前时间：第27天 06:40">
-              <button type="button" class="st-err__time-save">设定</button>
-            </div>
-
-            <div class="st-err__editbox" style="display:none">
-              <span class="st-err__label">修改这条消息的时间</span>
-              <div class="st-err__add-row">
-                <input type="number" class="st-err__edit-day" placeholder="第几天" min="0">
-                <input type="text" class="st-err__edit-hm" placeholder="HH:MM">
-                <button type="button" class="st-err__time-save st-err__edit-save">保存</button>
-                <button type="button" class="st-err__time-extract st-err__edit-cancel">取消</button>
-              </div>
-            </div>
-
-            <div class="st-err__label st-err__mt">时间线（点击 ✎ 可改某条消息的时间）</div>
-            <div class="st-err__events"></div>
-            <button type="button" class="st-err__expand">展开全部</button>
-
-            <div class="st-err__conflicts"></div>
-            <div class="st-err__hint">AI 每轮回复开头输出 <code>&lt;time&gt;</code> 块后，插件解析并推进时间轴；未输出则每轮兜底 +5 分钟。相对时间（昨天/前天…）会自动换算成第X天并提示核对。</div>
+          <div class="err__progress">
+            <span class="err__now-time">00:00</span>
+            <input type="range" class="err__seek" min="0" max="0" step="0.1" value="0">
+            <span class="err__now-dur">--:--</span>
           </div>
+          <div class="err__controls">
+            <button type="button" class="err__ctrl err__loop" title="列表循环">${ICONS.loopList}</button>
+            <button type="button" class="err__ctrl err__prev" title="上一首">${ICONS.prev}</button>
+            <button type="button" class="err__ctrl err__play-toggle" title="播放/暂停">${ICONS.play}</button>
+            <button type="button" class="err__ctrl err__next" title="下一首">${ICONS.next}</button>
+            <div class="err__vol">
+              <span class="err__vol-icon">${ICONS.volume}</span>
+              <input type="range" class="err__vol-input" min="0" max="100" step="1" value="80">
+            </div>
+          </div>
+        </div>
 
-          <div class="st-err__status"></div>
+        <div class="err__side">
+          <div class="err__side-head">
+            <span class="err__label">播放列表</span>
+            <span class="err__count">0 首</span>
+          </div>
+          <div class="err__add-row">
+            <input type="text" class="err__url-input" placeholder="粘贴音频直链（.mp3/.m4a/…）">
+            <button type="button" class="err__add-url" title="添加直链">${ICONS.plus}</button>
+            <button type="button" class="err__add-local" title="添加本地文件">${ICONS.folder}</button>
+          </div>
+          <input type="file" class="err__file-input" accept="audio/*" multiple hidden>
+          <div class="err__list"></div>
         </div>
       </div>
     </div>`;
-    $('#extensions_settings').append(html);
+    $('body').append(html);
     bindPanelEvents();
 }
 
 function bindPanelEvents() {
-    const panel = $('#error_container');
+    const panel = $('#st-error');
 
-    panel.find('.st-err__tab').on('click', function () {
-        const name = $(this).data('tab');
-        panel.find('.st-err__tab').removeClass('is-active');
-        $(this).addClass('is-active');
-        panel.find('.st-err__pane').hide();
-        panel.find(`.st-err__pane[data-pane="${name}"]`).show();
+    panel.find('.err__close').on('click', () => togglePanel(false));
+    panel.find('.err__play-toggle').on('click', togglePlay);
+    panel.find('.err__prev').on('click', playPrev);
+    panel.find('.err__next').on('click', playNext);
+    panel.find('.err__loop').on('click', cycleLoopMode);
+
+    // 列表点击：点行播放、点删除移除
+    panel.find('.err__list').on('click', '.err__row', function (e) {
+        if ($(e.target).closest('.err__row-del').length) return;
+        const id = $(this).data('id');
+        const i = settings.songs.findIndex(s => s.id === id);
+        if (i >= 0) playIndex(i);
+    });
+    panel.find('.err__list').on('click', '.err__row-del', function (e) {
+        e.stopPropagation();
+        removeSong($(this).data('id'));
     });
 
-    // 自动追踪开关
-    panel.find('.st-err__time-toggle').on('change', function () {
-        const state = getTimeState();
-        state.clock.paused = !this.checked;
-        saveChat();
-        updateTimeInjection();
-        renderTime();
-    });
-
-    // 推进按钮
-    panel.find('.st-err__adv').on('click', function () {
-        const mins = parseInt($(this).data('min'), 10) || 0;
-        const state = getTimeState();
-        if (state.clock.paused) { toastr.warning('时间已暂停，请先打开自动追踪'); return; }
-        advanceClock(state.clock, mins);
-        const last = chat[chat.length - 1];
-        if (last) bindTime(last, state.clock, chat.length - 1, true);
-        saveChat();
-        updateTimeInjection();
-        renderTime();
-        setStatus('时间推进 +' + fmtElapsed(mins) + ' → ' + fmtDaytime(state.clock.day, state.clock.minuteOfDay));
-    });
-
-    // 手动设定当前时间
-    const setTime = () => {
-        const input = panel.find('.st-err__time-input');
-        const v = (input.val() || '').trim();
-        if (!v) { toastr.warning('请输入时间，如：第27天 06:40'); return; }
-        const dayM = v.match(/(\d+)\s*天/);
-        const timeM = v.match(/(\d{1,2}):(\d{2})/);
-        if (!dayM && !timeM) { toastr.warning('格式不对，试试：第27天 06:40'); return; }
-        const state = getTimeState();
-        if (dayM) state.clock.day = parseInt(dayM[1], 10);
-        if (timeM) state.clock.minuteOfDay = parseInt(timeM[1], 10) * 60 + parseInt(timeM[2], 10);
-        const last = chat[chat.length - 1];
-        if (last) bindTime(last, state.clock, chat.length - 1, true);
-        saveChat();
-        updateTimeInjection();
-        renderTime();
-        setStatus('已设定当前时间：' + fmtDaytime(state.clock.day, state.clock.minuteOfDay));
+    // 添加直链
+    panel.find('.err__add-url').on('click', () => {
+        const input = panel.find('.err__url-input');
+        addUrlSong(input.val());
         input.val('');
-        toastr.success('已设定时间');
-    };
-    panel.find('.st-err__time-save').on('click', setTime);
-    panel.find('.st-err__time-input').on('keydown', (e) => { if (e.key === 'Enter') setTime(); });
-
-    // 展开/收起时间线
-    panel.on('click', '.st-err__expand', function () {
-        const box = panel.find('.st-err__events');
-        box.toggleClass('is-expanded');
-        $(this).text(box.hasClass('is-expanded') ? '收起' : '展开全部');
+    });
+    panel.find('.err__url-input').on('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const input = panel.find('.err__url-input');
+            addUrlSong(input.val());
+            input.val('');
+        }
     });
 
-    // 编辑某条消息的时间（钉住）
-    panel.on('click', '.st-err__ev-edit', function () {
-        const idx = parseInt($(this).data('idx'), 10);
-        const t = boundTime(chat[idx]);
-        if (!t) { toastr.warning('这条消息还没有时间'); return; }
-        editingIdx = idx;
-        const box = panel.find('.st-err__editbox');
-        box.find('.st-err__edit-day').val(t.day);
-        box.find('.st-err__edit-hm').val(fmtHM(t.minuteOfDay));
-        box.show();
-    });
-    panel.on('click', '.st-err__edit-cancel', function () {
-        editingIdx = null;
-        panel.find('.st-err__editbox').hide();
-    });
-    panel.on('click', '.st-err__edit-save', function () {
-        if (editingIdx == null) return;
-        const day = parseInt(panel.find('.st-err__edit-day').val(), 10);
-        const hm = (panel.find('.st-err__edit-hm').val() || '').trim();
-        const hmM = hm.match(/(\d{1,2}):(\d{2})/);
-        if (isNaN(day) || !hmM) { toastr.warning('天数填数字，时间填 HH:MM'); return; }
-        pinMessageTime(editingIdx, day, parseInt(hmM[1], 10) * 60 + parseInt(hmM[2], 10));
-        editingIdx = null;
-        panel.find('.st-err__editbox').hide();
-        toastr.success('已修改并重算后续时间');
+    // 本地文件
+    panel.find('.err__add-local').on('click', () => panel.find('.err__file-input').trigger('click'));
+    panel.find('.err__file-input').on('change', function () {
+        if (this.files && this.files.length) addLocalFiles(Array.from(this.files));
+        this.value = '';
     });
 
-    // 立即统计上下文
-    panel.on('click', '.st-err__ctx-count', countChatText);
+    // 进度 / 音量
+    let seeking = false;
+    panel.find('.err__seek').on('input', function () { seeking = true; });
+    panel.find('.err__seek').on('change', function () {
+        const v = parseFloat(this.value);
+        if (isFinite(v) && audio.duration) { audio.currentTime = v; }
+        seeking = false;
+    });
+    panel.find('.err__vol-input').on('input', function () { setVolume(parseInt(this.value, 10) / 100); });
+
+    // 点击进度条区域不冒泡到面板
+    panel.find('.err__progress').on('click', (e) => e.stopPropagation());
 }
 
-// ---------------- 斜杠命令 ----------------
-function registerSlashCommands() {
-    try {
-        const ctx = getContext();
-        const parser = ctx.SlashCommandParser;
-        const SlashCommand = ctx.SlashCommand;
-        if (!parser || !SlashCommand || typeof parser.addCommandObject !== 'function') {
-            console.warn('[Error] 斜杠命令不可用（酒馆版本较旧），跳过');
-            return;
-        }
-        const cmd = (name, help, cb) => parser.addCommandObject(SlashCommand.fromProps({ name, callback: cb, helpString: help }));
+function fitPanelToViewport() {
+    // 面板由 CSS 固定铺满全屏，这里只清除可能残留的内联定位。
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    panel.css({ top: '', bottom: '', left: '', right: '', width: '', maxWidth: '', maxHeight: '' });
+}
 
-        cmd('time', '查看当前剧情时间', async () => {
-            const s = getTimeState();
-            const r = fmtDaytime(s.clock.day, s.clock.minuteOfDay) + (s.clock.paused ? '（已暂停）' : '');
-            toastr.info(r);
-            return r;
-        });
-        cmd('timeset', '设定剧情时间：/timeset 第27天 06:40', async (_a, text) => {
-            const s = getTimeState();
-            const t = String(text || '').trim();
-            const dayM = t.match(/(\d+)\s*天/);
-            const timeM = t.match(/(\d{1,2}):(\d{2})/);
-            if (!dayM && !timeM) { toastr.error('格式：/timeset 第27天 06:40'); return ''; }
-            if (dayM) s.clock.day = parseInt(dayM[1], 10);
-            if (timeM) s.clock.minuteOfDay = parseInt(timeM[1], 10) * 60 + parseInt(timeM[2], 10);
-            saveChat(); updateTimeInjection(); renderTime();
-            return fmtDaytime(s.clock.day, s.clock.minuteOfDay);
-        });
-        cmd('timeadv', '推进时间：/timeadv +10m | +1h | +1d', async (_a, text) => {
-            const s = getTimeState();
-            const t = String(text || '').trim();
-            const m = t.match(/(\d+)\s*(天|d|h|m)/i);
-            if (!m) { toastr.error('格式：/timeadv +10m'); return ''; }
-            const v = parseInt(m[1], 10);
-            const u = m[2].toLowerCase();
-            const mins = (u === '天' || u === 'd') ? v * 1440 : (u === 'h' ? v * 60 : v);
-            advanceClock(s.clock, mins);
-            saveChat(); updateTimeInjection(); renderTime();
-            return fmtDaytime(s.clock.day, s.clock.minuteOfDay);
-        });
+function togglePanel(force) {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const show = force === undefined ? !panel.is(':visible') : force;
+    if (show) {
+        fitPanelToViewport();
+        panel.show();
+        renderAll();
+    } else {
+        panel.hide();
+    }
+    // 打开面板时给 body 打标记，用于移动端恢复触摸滚动（ST 移动端给 body 设了 touch-action:none）
+    document.body.classList.toggle('st-error-open', show);
+}
 
-        console.log('[Error] 斜杠命令已注册：/time /timeset /timeadv');
-    } catch (e) {
-        console.warn('[Error] 斜杠命令注册失败（酒馆版本可能较旧），已跳过：', e);
+// ---------------- 顶栏按钮 ----------------
+function buildButton() {
+    const btn = $(`<div id="st-error-button" class="fa-solid fa-music fa-fw interactable"
+        title="音乐播放器" data-i18n="[title]Music player" tabindex="0" role="button"></div>`);
+    btn.on('click', () => togglePanel());
+    // 优先插到顶栏右侧 #top-settings-holder，其次扩展菜单
+    const holder = $('#top-settings-holder');
+    if (holder.length) holder.append(btn);
+    else {
+        const menu = $('#extensionsMenu');
+        if (menu.length) menu.append(btn);
+        else $('body').append(btn);
     }
 }
 
 // ---------------- 初始化 ----------------
 jQuery(async () => {
-    extension_settings[extensionName] = extension_settings[extensionName] || {};
-    activeChar = this_chid !== undefined && characters && characters[this_chid] && characters[this_chid].name ? String(characters[this_chid].name) : '';
+    loadSettings();
+    audio.volume = settings.volume;
+    buildButton();
+    buildPanel();
 
-    buildSettingsPanel();
-    updateTimeInjection();
-    registerSlashCommands();
-
-    // —— 时间追踪 ——
-    eventSource.on(event_types.MESSAGE_RECEIVED, (messageId) => {
-        const idx = Number.isInteger(messageId) ? messageId : (chat.length - 1);
-        const m = chat[idx];
-        const before = m ? m.mes : '';
-        rebuildTimeline(idx >= 1 ? idx - 1 : 0);
-        updateTimeInjection();
-        renderTime();
-        // 流式路径消息已渲染，去掉 <time> 后需重渲染；非流式路径此时尚未 addOneMessage，调用无害
-        if (m && !m.is_user && !m.is_system && m.mes !== before) {
-            try { updateMessageBlock(idx, m); } catch (e) { /* 忽略渲染异常 */ }
+    // 音频事件
+    audio.addEventListener('play', () => { playing = true; renderControls(); renderNow(); });
+    audio.addEventListener('pause', () => { playing = false; renderControls(); renderNow(); });
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('timeupdate', () => {
+        const p = $('#st-error');
+        if (!p.length || !p.is(':visible')) return;
+        const d = audio.duration;
+        if (isFinite(d) && d > 0) {
+            p.find('.err__seek').attr('max', d).val(audio.currentTime);
         }
-        setStatus('已推进时间 → ' + fmtDaytime(getTimeState().clock.day, getTimeState().clock.minuteOfDay));
+        p.find('.err__now-time').text(fmtDur(audio.currentTime));
     });
-    eventSource.on(event_types.MESSAGE_SENT, () => {
-        const last = chat[chat.length - 1];
-        if (last && last.is_user) bindTime(last, getTimeState().clock, chat.length - 1);
-        saveChat();
-        renderTime();
+    audio.addEventListener('loadedmetadata', () => {
+        const s = currentSong();
+        const d = audio.duration;
+        if (s && isFinite(d) && d > 0) { s.duration = d; saveSettings(); }
+        renderNow();
     });
-    eventSource.on(event_types.MESSAGE_EDITED, () => { rebuildTimeline(0); updateTimeInjection(); renderTime(); });
-    eventSource.on(event_types.MESSAGE_SWIPED, () => { rebuildTimeline(0); updateTimeInjection(); renderTime(); });
-    eventSource.on(event_types.MESSAGE_DELETED, () => { rebuildTimeline(0); updateTimeInjection(); renderTime(); });
-
-    // 每轮生成前刷新时间卡注入（捕捉手动推进后的最新状态）
-    eventSource.on(event_types.GENERATION_AFTER_COMMANDS, () => { updateTimeInjection(); });
-
-    // 切换聊天/角色：重建时间线
-    eventSource.on(event_types.CHAT_CHANGED, () => {
-        setTimeout(() => {
-            activeChar = this_chid !== undefined && characters && characters[this_chid] && characters[this_chid].name ? String(characters[this_chid].name) : '';
-            rebuildTimeline(0);
-            updateTimeInjection();
-            renderTime();
-            renderContext();
-            renderCharBinding();
-        }, 150);
+    audio.addEventListener('error', () => {
+        if (!audio.src) return;
+        toastr.error('播放出错：' + (currentSong() ? currentSong().title : '未知'));
     });
 
-    // —— 上下文统计 ——
-    // 精确口径：GENERATION_STARTED 置标记，GENERATE_AFTER_COMBINE_PROMPTS 统计最终 prompt。
-    // 兜底口径：GENERATION_ENDED 若本轮没统计到（事件缺失或没触发），退化为统计聊天文本。
-    if (event_types.GENERATION_STARTED) {
-        eventSource.on(event_types.GENERATION_STARTED, () => { isRealGeneration = true; lastPromptCounted = false; });
-    }
-    if (event_types.GENERATE_AFTER_COMBINE_PROMPTS) {
-        eventSource.on(event_types.GENERATE_AFTER_COMBINE_PROMPTS, (data) => {
-            if (!isRealGeneration) return;
-            const p = data && data.prompt;
-            if (typeof p === 'string' && p) { refreshContextUsage(p, '精确 prompt'); lastPromptCounted = true; }
-        });
-    }
-    eventSource.on(event_types.GENERATION_ENDED, () => {
-        isRealGeneration = false;
-        if (!lastPromptCounted) countChatText();
-    });
-
-    renderTime();
-    renderContext();
-    renderCharBinding();
-    setStatus('已加载，监听生成事件中…');
-    console.log('[Error] 插件已加载', { HAS_AFTER_COMBINE: !!event_types.GENERATE_AFTER_COMBINE_PROMPTS });
+    $(window).on('resize.st-error', fitPanelToViewport);
+    $(window).on('orientationchange.st-error', () => setTimeout(fitPanelToViewport, 300));
 });
 
-// ST 自动更新后调用，刷新页面以应用新版本
+// ST 自动更新扩展后会调用 manifest.hooks.update 指向的这个函数（此时新代码已 git pull 到磁盘），
+// 在这里刷新页面以加载新版本，无需手动刷新。
 export function reloadOnUpdate() {
-    toastr.info('Error 已更新，正在刷新页面以应用新版本...', undefined, { timeOut: 1500 });
+    toastr.info('error 音乐播放器已更新，正在刷新页面以应用新版本...', undefined, { timeOut: 1500 });
     setTimeout(() => location.reload(), 1500);
 }
