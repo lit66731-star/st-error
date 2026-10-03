@@ -176,28 +176,24 @@
     max-width: 110px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-/* 中间漂浮的音符 + 爱心（氛围，配色加深保证可见） */
-.err__duo-link { position: relative; width: 64px; height: 92px; overflow: hidden; flex: 0 0 auto; }
+/* 中间漂浮的音符 + 爱心（横着连接两个头像，不规则上下浮动） */
+.err__duo-link { position: relative; width: 96px; height: 44px; flex: 0 0 auto; }
 .err__float {
-    position: absolute; left: 50%; bottom: -18px; transform: translateX(-50%);
-    font-size: 18px; line-height: 1; opacity: 0;
-    animation: err-float-up 5.4s linear infinite;
+    position: absolute; top: 50%; transform: translate(-50%, -50%);
+    font-size: 17px; line-height: 1; opacity: 0.9;
     text-shadow: 0 1px 3px rgba(41, 39, 36, 0.12);
 }
-.err__float--n1 { animation-delay: 0s;   color: #B0716B; }
-.err__float--h1 { animation-delay: 0.7s; color: #C9857E; }
-.err__float--n2 { animation-delay: 1.4s; color: #A98E8A; }
-.err__float--h2 { animation-delay: 2.1s; color: #B0716B; }
-.err__float--n3 { animation-delay: 2.8s; color: #C79A7A; }
-.err__float--h3 { animation-delay: 3.5s; color: #C9857E; }
-.err__float--n4 { animation-delay: 4.2s; color: #A98E8A; }
-.err__float--h4 { animation-delay: 4.9s; color: #B0716B; }
-@keyframes err-float-up {
-    0%   { transform: translate(-50%, 0) rotate(-8deg); opacity: 0; }
-    12%  { opacity: 0.95; }
-    50%  { transform: translate(calc(-50% + 7px), -52px) rotate(8deg); }
-    85%  { opacity: 0.95; }
-    100% { transform: translate(-50%, -110px) rotate(-8deg); opacity: 0; }
+.err__float--n1 { left: 10%;  color: #B0716B; animation: err-float-bob 2.6s ease-in-out infinite; animation-delay: 0s; }
+.err__float--h1 { left: 26%;  color: #C9857E; animation: err-float-bob 3.3s ease-in-out infinite; animation-delay: 0.4s; }
+.err__float--n2 { left: 42%;  color: #A98E8A; animation: err-float-bob 2.2s ease-in-out infinite; animation-delay: 0.8s; }
+.err__float--h2 { left: 58%;  color: #B0716B; animation: err-float-bob 3.7s ease-in-out infinite; animation-delay: 0.2s; }
+.err__float--n3 { left: 74%;  color: #C79A7A; animation: err-float-bob 2.9s ease-in-out infinite; animation-delay: 0.6s; }
+.err__float--h3 { left: 90%;  color: #C9857E; animation: err-float-bob 3.1s ease-in-out infinite; animation-delay: 0.1s; }
+.err__float--n4 { left: 18%;  top: 26%; color: #A98E8A; animation: err-float-bob 3.5s ease-in-out infinite; animation-delay: 1.2s; }
+.err__float--h4 { left: 68%;  top: 74%; color: #B0716B; animation: err-float-bob 2.7s ease-in-out infinite; animation-delay: 0.9s; }
+@keyframes err-float-bob {
+    0%, 100% { transform: translate(-50%, -50%) translateY(0) rotate(-6deg); }
+    50%      { transform: translate(-50%, -50%) translateY(-10px) rotate(6deg); }
 }
 
 /* 播放时头像呼吸感 */
@@ -582,7 +578,7 @@ input[type="range"].err__vol-input::-moz-range-thumb {
     }
     .err__duo-avatar { width: 84px; height: 84px; }
     .err__duo-avatar-fallback svg { width: 38px; height: 38px; }
-    .err__duo-link { width: 48px; height: 84px; }
+    .err__duo-link { width: 60px; height: 40px; }
     .err__now-title { font-size: 17px; }
     .err__controls { gap: 12px; }
     .err__play-toggle { width: 46px; height: 46px; }
