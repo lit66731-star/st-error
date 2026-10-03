@@ -21,7 +21,9 @@ SillyTavern 第三方扩展，界面仿**网易云音乐**，配色沿用 Serend
    git clone https://github.com/Binaryify/NeteaseCloudMusicApi && cd NeteaseCloudMusicApi && npm i && node app.js
    ```
 2. 打开 error 面板 → 网易云栏点「齿轮」→ 填 API 地址（如 `http://你的服务器:3000`）→ 保存。
-3. 点「扫码」按钮，用网易云音乐 App 扫码登录（登录态保存在服务端，浏览器不接触 cookie）。
+3. 登录（二选一）：
+   - **Cookie 登录（推荐，绕开机房 IP 风控）**：在自己电脑浏览器登录 `music.163.com` → F12 → Application → Cookies → `music.163.com` → 复制 `MUSIC_U` 的值，粘到齿轮里的「MUSIC_U cookie」框 → 保存。云端 API 请求会带上这个登录态，扫码那种「设备环境异常」就不会再出现。
+   - 扫码登录：点「扫码」，用网易云音乐 App 扫。若你的服务器是机房 IP（阿里云/腾讯云等），扫码大概率被网易风控拦截，改用上面的 Cookie 登录即可。
 4. 搜索、点歌即可；播放地址按需解析，5 分钟内复用缓存。
 
 > 注意：把 API 端口暴露到公网前，建议用 nginx 反代到同源路径并加访问控制，避免他人滥用你的登录态。
@@ -40,6 +42,7 @@ SillyTavern 第三方扩展，界面仿**网易云音乐**，配色沿用 Serend
 
 ## 更新记录
 
+- **1.1.2**：新增 Cookie 登录——齿轮里可填 `MUSIC_U`，云端请求自动带登录态，绕开机房 IP 对扫码登录的风控。
 - **1.1.1**：修复扫码登录二维码不显示——部分版本 `qrimg` 已自带 `data:` 前缀，避免重复拼接。
 - **1.1.0**：新增网易云源——搜索、扫码登录（NeteaseCloudMusicApi 后端）、320k 优先解析、同步歌词（当前句 + 翻译）；播放列表来源标识区分本地/直链/网易云。
 - **1.0.1**：修复顶栏按钮位置——按钮改为与酒馆其它顶栏按钮同构（`.drawer` + `.drawer-icon`），并插入到按钮群 `#ai-config-button` 之后，不再被挤到右上角。

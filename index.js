@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.1.1'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.1.2'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -44,6 +44,7 @@ let settings = {
     volume: 0.8,
     neteaseApi: '',     // 网易云 API 地址（NeteaseCloudMusicApi），如 http://127.0.0.1:3000
     neteaseLoggedIn: false,
+    neteaseCookie: '',  // 网易云 MUSIC_U cookie（可信设备登录，绕开机房 IP 的风控）
 };
 
 const ncm = {
@@ -282,7 +283,12 @@ async function removeSong(id) {
 async function ncmFetch(path) {
     const base = (settings.neteaseApi || '').replace(/\/+$/, '');
     if (!base) { toastr.warning('请先配置网易云 API 地址（点旁边的齿轮）'); return null; }
-    const res = await fetch(base + path, { credentials: 'omit' });
+    let url = base + path;
+    // 已填 MUSIC_U 就带上，让 API 以登录态请求（绕开机房 IP 对扫码登录的风控）
+    if (settings.neteaseCookie) {
+        url += (path.includes('?') ? '&' : '?') + 'cookie=' + encodeURIComponent('MUSIC_U=' + settings.neteaseCookie.trim());
+    }
+    const res = await fetch(url, { credentials: 'omit' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return res.json();
 }
@@ -477,8 +483,9 @@ function ncmQrClose() {
 function syncNcmLoginUi() {
     const btn = $('#st-error .err__ncm-login');
     if (!btn.length) return;
-    btn.toggleClass('is-logged', !!settings.neteaseLoggedIn)
-       .attr('title', settings.neteaseLoggedIn ? '网易云已登录（点击重新扫码）' : '扫码登录网易云');
+    const logged = !!settings.neteaseLoggedIn || !!settings.neteaseCookie;
+    btn.toggleClass('is-logged', logged)
+       .attr('title', logged ? '网易云已登录（扫码或 Cookie）' : '扫码登录网易云');
 }
 
 // ---------------- 渲染 ----------------
@@ -624,6 +631,7 @@ function buildPanel() {
             </div>
             <div class="err__ncm-settings" style="display:none">
               <input type="text" class="err__ncm-api" placeholder="网易云 API 地址，如 http://127.0.0.1:3000">
+              <input type="text" class="err__ncm-cookie" placeholder="MUSIC_U cookie（可选，绕开机房 IP 风控）">
               <button type="button" class="err__ncm-save">保存</button>
             </div>
             <div class="err__ncm-results"></div>
@@ -704,13 +712,16 @@ function bindPanelEvents() {
     panel.find('.err__ncm-gear').on('click', () => {
         const settingsRow = panel.find('.err__ncm-settings');
         panel.find('.err__ncm-api').val(settings.neteaseApi || '');
+        panel.find('.err__ncm-cookie').val(settings.neteaseCookie || '');
         settingsRow.toggle();
     });
     panel.find('.err__ncm-save').on('click', () => {
         settings.neteaseApi = panel.find('.err__ncm-api').val().trim();
+        settings.neteaseCookie = panel.find('.err__ncm-cookie').val().trim();
         saveSettings();
         panel.find('.err__ncm-settings').hide();
-        toastr.success('网易云 API 地址已保存');
+        syncNcmLoginUi();
+        toastr.success('网易云设置已保存');
     });
     panel.find('.err__ncm-login').on('click', ncmLogin);
     panel.find('.err__ncm-results').on('click', '.err__ncm-row', function () {

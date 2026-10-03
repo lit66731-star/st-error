@@ -388,13 +388,15 @@
 .err__ncm-search svg, .err__ncm-login svg, .err__ncm-gear svg, .err__ncm-save svg { width: 16px; height: 16px; }
 .err__ncm-login.is-logged { color: var(--err-accent-deep); border-color: var(--err-accent-deep); }
 
-.err__ncm-settings { display: flex; gap: 6px; margin-top: 6px; }
-.err__ncm-api {
-    flex: 1; min-width: 0; height: 30px; padding: 0 10px; font-size: 12px;
+.err__ncm-settings { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.err__ncm-api, .err__ncm-cookie {
+    width: 100%; height: 30px; padding: 0 10px; font-size: 12px;
     border: 1px solid var(--err-border-2); background: var(--err-surface); color: var(--err-text);
     border-radius: 6px; font: inherit; box-sizing: border-box;
 }
-.err__ncm-save { width: auto; padding: 0 12px; height: 30px; font-size: 12px; }
+.err__ncm-api::placeholder, .err__ncm-cookie::placeholder { color: var(--err-text-3); }
+.err__ncm-api:focus, .err__ncm-cookie:focus { outline: none; border-color: var(--err-accent-deep); }
+.err__ncm-save { align-self: flex-end; padding: 0 12px; height: 30px; font-size: 12px; }
 
 .err__ncm-results {
     max-height: 300px; overflow-y: auto; margin-top: 6px;
