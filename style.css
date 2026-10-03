@@ -404,9 +404,11 @@ input[type="range"].err__vol-input::-moz-range-thumb {
 #st-error ::-webkit-scrollbar-track { background: transparent; }
 
 /* ============ 顶栏按钮 ============ */
+/* 按钮结构已对齐酒馆顶栏其它按钮（.drawer 包裹 + .drawer-icon），
+   颜色/透明度/字号等样式交给酒馆 .drawer-icon / .closedIcon 统一处理，
+   这里只保证整个可点区域显示手型光标。 */
 #st-error-button {
     cursor: pointer;
-    color: var(--SmartThemeBodyColor, #292724);
 }
 
 /* ============ 移动端（≤1000px） ============ */

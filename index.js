@@ -5,7 +5,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.0.0'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.0.1'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -471,16 +471,24 @@ function togglePanel(force) {
 
 // ---------------- 顶栏按钮 ----------------
 function buildButton() {
-    const btn = $(`<div id="st-error-button" class="fa-solid fa-music fa-fw interactable"
-        title="音乐播放器" data-i18n="[title]Music player" tabindex="0" role="button"></div>`);
+    // 与酒馆顶栏其它按钮同构：.drawer 包裹 + .drawer-icon 图标，
+    // 这样能正确参与顶栏按钮群的 flex 布局，而不是被挤到右上角。
+    const btn = $(`
+        <div id="st-error-button" class="drawer" title="音乐播放器" tabindex="0" role="button">
+            <div class="drawer-icon fa-solid fa-music fa-fw closedIcon interactable" title="音乐播放器" data-i18n="[title]Music player"></div>
+        </div>`);
     btn.on('click', () => togglePanel());
-    // 优先插到顶栏右侧 #top-settings-holder，其次扩展菜单
-    const holder = $('#top-settings-holder');
-    if (holder.length) holder.append(btn);
+    // 插入顶栏按钮群：排在 AI 配置按钮后面，与其它按钮同排；找不到再逐级回退
+    const anchor = $('#ai-config-button');
+    if (anchor.length) anchor.after(btn);
     else {
-        const menu = $('#extensionsMenu');
-        if (menu.length) menu.append(btn);
-        else $('body').append(btn);
+        const holder = $('#top-settings-holder');
+        if (holder.length) holder.append(btn);
+        else {
+            const menu = $('#extensionsMenu');
+            if (menu.length) menu.append(btn);
+            else $('body').append(btn);
+        }
     }
 }
 
