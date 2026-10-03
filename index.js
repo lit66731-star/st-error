@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.1.2'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.2.0'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -28,6 +28,7 @@ const ICONS = {
     gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     qr: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM19 14h2v3h-2zM14 19h3v2h-3zM19 19h2v2h-2z"/></svg>',
     cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .7-7.94A5.5 5.5 0 0 0 7.1 8.5 4.5 4.5 0 0 0 7 18z"/></svg>',
+    user: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.6 3.6-6 8-6s8 2.4 8 6v1H4z"/></svg>',
 };
 
 // ---------------- 状态 ----------------
@@ -58,6 +59,84 @@ const ncm = {
 let audio = new Audio();
 let playing = false;
 let currentObjectUrl = null; // 本地文件播放时的 object URL，切换时 revoke
+
+// ---------------- 一起听（双头像 + AI 点评） ----------------
+let duoPersonas = null;   // 延迟加载 personas.js 拿 user_avatar
+let duoCommentSeq = 0;    // 切歌时递增，丢弃过期的点评结果
+let duoCommentTimer = null;
+
+function duoContext() {
+    try {
+        return (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
+    } catch (e) { return null; }
+}
+
+async function duoUserAvatar() {
+    try {
+        if (!duoPersonas) duoPersonas = await import('../../../personas.js');
+        const ua = duoPersonas && duoPersonas.user_avatar;
+        const ctx = duoContext();
+        if (ua && ctx && ctx.getThumbnailUrl) return ctx.getThumbnailUrl('avatar', ua);
+        return ua || '';
+    } catch (e) { return ''; }
+}
+
+function duoCharAvatar() {
+    const ctx = duoContext();
+    if (!ctx) return '';
+    const ch = ctx.characters && ctx.characters[ctx.characterId];
+    if (ch && ch.avatar && ch.avatar !== 'none') {
+        try { return ctx.getThumbnailUrl('avatar', ch.avatar); } catch (e) {}
+    }
+    return '';
+}
+
+function duoSetAvatar(imgEl, url) {
+    if (!imgEl || !imgEl.length) return;
+    if (url) {
+        imgEl.attr('src', url).show();
+        imgEl.off('error').on('error', () => imgEl.hide());
+    } else {
+        imgEl.hide();
+    }
+}
+
+function renderDuo() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const ctx = duoContext();
+    panel.find('.err__duo-name--char').text((ctx && ctx.name2) || '');
+    panel.find('.err__duo-name--user').text((ctx && ctx.name1) || '你');
+    duoSetAvatar(panel.find('.err__duo-img--char'), duoCharAvatar());
+    duoUserAvatar().then(ua => duoSetAvatar(panel.find('.err__duo-img--user'), ua));
+}
+
+function duoComment(song) {
+    const panel = $('#st-error');
+    const ctx = duoContext();
+    if (!panel.length || !song) return;
+    const seq = ++duoCommentSeq;
+    const bubble = panel.find('.err__duo-bubble-text');
+    clearTimeout(duoCommentTimer);
+    // 切歌太频繁先等一小会，避免每首都触发生成
+    duoCommentTimer = setTimeout(async () => {
+        if (seq !== duoCommentSeq) return;
+        if (!ctx || typeof ctx.generateQuietPrompt !== 'function') {
+            bubble.text(song.title ? `正在听《${song.title}》…` : '一起听…');
+            return;
+        }
+        bubble.text('…');
+        try {
+            const prompt = `（一起听）你们此刻正在一起听这首歌：《${song.title}》${song.artist ? '，歌手：' + song.artist : ''}。请以你的身份，用一句简短、自然的话点评这首歌或此刻的氛围。直接说台词，不要动作描写、不要反问、不要解释。`;
+            const reply = await ctx.generateQuietPrompt({ quietPrompt: prompt, trimToSentence: true });
+            if (seq !== duoCommentSeq) return;
+            const text = (reply || '').trim();
+            bubble.text(text || `正在听《${song.title}》…`);
+        } catch (e) {
+            if (seq === duoCommentSeq) bubble.text(`正在听《${song.title}》…`);
+        }
+    }, 1200);
+}
 
 // ---------------- 工具 ----------------
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
@@ -173,6 +252,7 @@ async function playIndex(i) {
         audio.src = src;
         await audio.play();
         if (s.source === 'netease') ncmLoadLyric(s.ncmId);
+        duoComment(s);
     } catch (e) {
         toastr.warning('播放失败：' + (s.title || s.url));
     }
@@ -495,8 +575,7 @@ function renderControls() {
     const m = LOOP_MODES.find(x => x.key === settings.loopMode) || LOOP_MODES[0];
     panel.find('.err__loop').attr('title', m.title).html(ICONS[m.icon]);
     panel.find('.err__play-toggle').html(playing ? ICONS.pause : ICONS.play);
-    panel.find('.err__disc').toggleClass('is-playing', playing);
-    panel.find('.err__needle').toggleClass('is-on', playing);
+    panel.find('.err__duo').toggleClass('is-playing', playing);
 }
 
 function renderNow() {
@@ -505,25 +584,14 @@ function renderNow() {
     const s = currentSong();
     const titleEl = panel.find('.err__now-title');
     const artistEl = panel.find('.err__now-artist');
-    const discCover = panel.find('.err__disc-cover');
-    const discNote = panel.find('.err__disc-note');
     if (s) {
         titleEl.text(s.title);
         artistEl.text(s.artist || '未知艺术家');
-        if (s.cover) {
-            discCover.css('background-image', `url("${s.cover.replace(/"/g, '\\"')}")`).show();
-            discNote.hide();
-        } else {
-            discCover.css('background-image', '').hide();
-            discNote.show();
-        }
         panel.find('.err__now-time').text(fmtDur(audio.currentTime || 0));
         panel.find('.err__now-dur').text(fmtDur(s.duration));
     } else {
         titleEl.text('未在播放');
         artistEl.text('添加歌曲开始播放');
-        discCover.css('background-image', '').hide();
-        discNote.show();
         panel.find('.err__now-time').text('00:00');
         panel.find('.err__now-dur').text('--:--');
     }
@@ -565,6 +633,7 @@ function renderAll() {
     renderList();
     renderNow();
     renderControls();
+    renderDuo();
     const panel = $('#st-error');
     if (panel.length) panel.find('.err__count').text(settings.songs.length + ' 首');
 }
@@ -584,12 +653,27 @@ function buildPanel() {
 
       <div class="err__body">
         <div class="err__stage">
-          <div class="err__disc-wrap">
-            <div class="err__needle"><span class="err__needle-pivot"></span><span class="err__needle-arm"></span></div>
-            <div class="err__disc">
-              <div class="err__disc-cover" style="display:none"></div>
-              <div class="err__disc-note">${ICONS.music}</div>
-              <div class="err__disc-center"></div>
+          <div class="err__duo">
+            <div class="err__duo-avatars">
+              <div class="err__duo-person err__duo-person--char">
+                <span class="err__duo-avatar"><span class="err__duo-avatar-fallback">${ICONS.user}</span><img class="err__duo-img err__duo-img--char" alt="" style="display:none"></span>
+                <span class="err__duo-name err__duo-name--char"></span>
+              </div>
+              <div class="err__duo-link" aria-hidden="true">
+                <span class="err__float err__float--n1">♪</span>
+                <span class="err__float err__float--h1">♥</span>
+                <span class="err__float err__float--n2">♫</span>
+                <span class="err__float err__float--h2">♥</span>
+                <span class="err__float err__float--n3">♪</span>
+                <span class="err__float err__float--h3">♡</span>
+              </div>
+              <div class="err__duo-person err__duo-person--user">
+                <span class="err__duo-avatar"><span class="err__duo-avatar-fallback">${ICONS.user}</span><img class="err__duo-img err__duo-img--user" alt="" style="display:none"></span>
+                <span class="err__duo-name err__duo-name--user">你</span>
+              </div>
+            </div>
+            <div class="err__duo-chat">
+              <div class="err__duo-bubble"><span class="err__duo-bubble-text">一起听…</span></div>
             </div>
           </div>
           <div class="err__now">

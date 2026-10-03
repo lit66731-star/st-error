@@ -104,81 +104,81 @@
     box-sizing: border-box;
 }
 
-.err__disc-wrap { position: relative; }
+/* -------- 一起听：双头像 + 连接 + 点评气泡 -------- */
+.err__duo { display: flex; flex-direction: column; align-items: center; gap: 18px; }
 
-/* 唱针 */
-.err__needle {
-    position: absolute;
-    top: 4px;
-    right: 34px;
-    width: 20px;
-    height: 132px;
-    z-index: 3;
-    transform: rotate(20deg);
-    transform-origin: 10px 10px;
-    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-    pointer-events: none;
-}
-.err__needle.is-on { transform: rotate(5deg); }
-.err__needle-pivot {
-    position: absolute; top: 0; left: 4px;
-    width: 12px; height: 12px; border-radius: 50%;
-    background: #6E6A65;
-}
-.err__needle-arm {
-    position: absolute; top: 9px; left: 9px;
-    width: 2px; height: 118px;
-    background: linear-gradient(#6E6A65, #8a8580);
-    border-radius: 1px;
-}
+.err__duo-avatars { display: flex; align-items: center; gap: 18px; }
 
-/* 唱盘 */
-.err__disc {
-    width: 264px;
-    height: 264px;
-    border-radius: 50%;
+.err__duo-person { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+
+.err__duo-avatar {
     position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(circle at 50% 45%, #3a3733 0%, #2a2724 55%, #211e1b 100%);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), 0 10px 30px rgba(41, 39, 36, 0.14);
-    animation: err-spin 24s linear infinite;
-    animation-play-state: paused;
+    width: 96px; height: 96px; border-radius: 50%;
+    background: var(--err-accent-bg);
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px var(--err-border-2), 0 8px 24px rgba(41, 39, 36, 0.12);
     overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    flex: 0 0 auto;
 }
-.err__disc.is-playing { animation-play-state: running; }
-.err__disc::before { /* 唱盘纹路 */
-    content: '';
-    position: absolute;
-    inset: 18px;
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow: 0 0 0 7px rgba(255, 255, 255, 0.025), 0 0 0 14px rgba(255, 255, 255, 0.02);
-}
-.err__disc-cover {
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    background-size: cover;
-    background-position: center;
-    z-index: 1;
-}
-.err__disc-note { color: rgba(248, 246, 242, 0.82); z-index: 1; position: relative; }
-.err__disc-note svg { width: 64px; height: 64px; display: block; }
-.err__disc-center {
-    position: absolute;
-    width: 44px; height: 44px;
-    border-radius: 50%;
-    background: var(--err-bg);
-    box-shadow: inset 0 0 0 1px var(--err-border-2);
-    z-index: 2;
+.err__duo-avatar-fallback { color: var(--err-accent-deep); display: flex; }
+.err__duo-avatar-fallback svg { width: 44px; height: 44px; }
+.err__duo-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+.err__duo-name {
+    font-size: 12px; color: var(--err-text-2);
+    max-width: 110px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-@keyframes err-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+/* 中间漂浮的音符 + 爱心（氛围） */
+.err__duo-link { position: relative; width: 60px; height: 96px; overflow: hidden; flex: 0 0 auto; }
+.err__float {
+    position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%);
+    font-size: 15px; line-height: 1; opacity: 0;
+    animation: err-float-up 5.6s linear infinite;
 }
+.err__float--n1 { animation-delay: 0s;   color: var(--err-accent-deep); }
+.err__float--h1 { animation-delay: 0.9s; color: var(--err-danger); }
+.err__float--n2 { animation-delay: 1.8s; color: var(--err-accent); }
+.err__float--h2 { animation-delay: 2.7s; color: var(--err-danger); }
+.err__float--n3 { animation-delay: 3.6s; color: var(--err-accent-deep); }
+.err__float--h3 { animation-delay: 4.5s; color: var(--err-danger); }
+@keyframes err-float-up {
+    0%   { transform: translate(-50%, 0); opacity: 0; }
+    12%  { opacity: 1; }
+    80%  { opacity: 1; }
+    100% { transform: translate(-50%, -110px); opacity: 0; }
+}
+
+/* 播放时头像呼吸感 */
+.err__duo.is-playing .err__duo-avatar { animation: err-avatar-breathe 2.6s ease-in-out infinite; }
+@keyframes err-avatar-breathe {
+    0%, 100% { box-shadow: 0 0 0 1px var(--err-border-2), 0 8px 24px rgba(41, 39, 36, 0.12); }
+    50%      { box-shadow: 0 0 0 4px rgba(205, 179, 176, 0.35), 0 8px 26px rgba(169, 142, 138, 0.22); }
+}
+
+/* 点评气泡（指向角色） */
+.err__duo-chat { max-width: 340px; width: 100%; }
+.err__duo-bubble {
+    position: relative;
+    padding: 10px 16px;
+    border-radius: 14px;
+    background: var(--err-surface);
+    border: 1px solid var(--err-border-2);
+    box-shadow: 0 4px 14px rgba(41, 39, 36, 0.06);
+    font-size: 13px; line-height: 1.55; color: var(--err-text);
+    text-align: left; min-height: 20px;
+}
+.err__duo-bubble::before {
+    content: '';
+    position: absolute; top: -7px; left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 12px; height: 12px;
+    background: var(--err-surface);
+    border-left: 1px solid var(--err-border-2);
+    border-top: 1px solid var(--err-border-2);
+}
+.err__duo-bubble-text { display: block; }
 
 /* 当前曲目 */
 .err__now { text-align: center; max-width: 100%; padding: 0 8px; }
@@ -506,10 +506,9 @@ input[type="range"].err__vol-input::-moz-range-thumb {
         padding: 20px 20px 22px;
         gap: 14px;
     }
-    .err__disc { width: 200px; height: 200px; }
-    .err__disc-note svg { width: 48px; height: 48px; }
-    .err__needle { height: 102px; right: 26px; }
-    .err__needle-arm { height: 88px; }
+    .err__duo-avatar { width: 84px; height: 84px; }
+    .err__duo-avatar-fallback svg { width: 38px; height: 38px; }
+    .err__duo-link { width: 48px; height: 84px; }
     .err__now-title { font-size: 17px; }
     .err__controls { gap: 12px; }
     .err__play-toggle { width: 46px; height: 46px; }
