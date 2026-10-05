@@ -156,9 +156,9 @@
     flex: 0 0 auto;
     align-self: center;
     display: flex;
-    gap: 2px;
+    gap: 6px;
     margin: 0 0 calc(14px + env(safe-area-inset-bottom));
-    padding: 5px;
+    padding: 7px;
     background: rgba(255, 255, 255, 0.88);
     border: 1px solid var(--err-border);
     border-radius: 999px;
@@ -168,13 +168,13 @@
 }
 .err__dock-btn {
     flex: 0 0 auto;
-    min-width: 60px;
+    min-width: 68px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    padding: 7px 14px;
+    gap: 4px;
+    padding: 8px 16px;
     background: none;
     border: none;
     color: var(--err-text-3);
@@ -182,15 +182,24 @@
     border-radius: 999px;
     font-size: 11px;
     letter-spacing: 0.02em;
-    transition: color 0.15s, background 0.15s;
+    transition: color 0.18s, background 0.18s, transform 0.18s;
 }
 .err__dock-btn svg { width: 21px; height: 21px; }
 .err__dock-btn:hover { color: var(--err-rose-deep); }
+.err__dock-btn:active { transform: scale(0.86); }
 .err__dock-btn.is-on {
     color: var(--err-rose-deep);
     background: var(--err-rose-bg);
 }
-.err__dock-btn.is-on svg { filter: drop-shadow(0 2px 4px rgba(230, 128, 152, 0.35)); }
+.err__dock-btn.is-on svg {
+    filter: drop-shadow(0 2px 4px rgba(230, 128, 152, 0.35));
+    animation: err-dock-pop 0.35s ease;
+}
+@keyframes err-dock-pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.28); }
+    100% { transform: scale(1); }
+}
 
 /* -------- 一起听：双头像 + 连接 + 氛围对话 -------- */
 .err__duo { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
@@ -664,8 +673,8 @@ input[type="range"].err__vol-input::-moz-range-thumb {
     .err__lrc-text { font-size: 15px; }
     .err__home-title { font-size: 21px; }
     .err__set { padding: 16px 18px 40px; }
-    .err__dock { margin-bottom: calc(10px + env(safe-area-inset-bottom)); padding: 4px; }
-    .err__dock-btn { min-width: 52px; padding: 6px 11px; }
+    .err__dock { margin-bottom: calc(10px + env(safe-area-inset-bottom)); padding: 5px; gap: 4px; }
+    .err__dock-btn { min-width: 60px; padding: 7px 13px; gap: 3px; }
     .err__dock-btn svg { width: 20px; height: 20px; }
     .err__row-del { opacity: 1; }
 }
