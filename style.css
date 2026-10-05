@@ -154,32 +154,43 @@
 /* -------- 底部 Dock -------- */
 .err__dock {
     flex: 0 0 auto;
+    align-self: center;
     display: flex;
-    border-top: 1px solid var(--err-border);
-    background: var(--err-surface);
-    padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
-    box-shadow: 0 -6px 20px rgba(163, 120, 110, 0.06);
+    gap: 2px;
+    margin: 0 0 calc(14px + env(safe-area-inset-bottom));
+    padding: 5px;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid var(--err-border);
+    border-radius: 999px;
+    box-shadow: 0 10px 28px rgba(230, 128, 152, 0.20), 0 2px 6px rgba(230, 128, 152, 0.08);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 .err__dock-btn {
-    flex: 1;
+    flex: 0 0 auto;
+    min-width: 60px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
-    padding: 8px 0;
+    justify-content: center;
+    gap: 2px;
+    padding: 7px 14px;
     background: none;
     border: none;
     color: var(--err-text-3);
     cursor: pointer;
-    border-radius: 14px;
+    border-radius: 999px;
     font-size: 11px;
     letter-spacing: 0.02em;
     transition: color 0.15s, background 0.15s;
 }
-.err__dock-btn svg { width: 22px; height: 22px; }
-.err__dock-btn:hover { color: var(--err-text-2); background: var(--err-surface-2); }
-.err__dock-btn.is-on { color: var(--err-rose-deep); }
-.err__dock-btn.is-on svg { filter: drop-shadow(0 3px 6px rgba(240, 127, 150, 0.35)); }
+.err__dock-btn svg { width: 21px; height: 21px; }
+.err__dock-btn:hover { color: var(--err-rose-deep); }
+.err__dock-btn.is-on {
+    color: var(--err-rose-deep);
+    background: var(--err-rose-bg);
+}
+.err__dock-btn.is-on svg { filter: drop-shadow(0 2px 4px rgba(230, 128, 152, 0.35)); }
 
 /* -------- 一起听：双头像 + 连接 + 氛围对话 -------- */
 .err__duo { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
@@ -653,5 +664,8 @@ input[type="range"].err__vol-input::-moz-range-thumb {
     .err__lrc-text { font-size: 15px; }
     .err__home-title { font-size: 21px; }
     .err__set { padding: 16px 18px 40px; }
+    .err__dock { margin-bottom: calc(10px + env(safe-area-inset-bottom)); padding: 4px; }
+    .err__dock-btn { min-width: 52px; padding: 6px 11px; }
+    .err__dock-btn svg { width: 20px; height: 20px; }
     .err__row-del { opacity: 1; }
 }
