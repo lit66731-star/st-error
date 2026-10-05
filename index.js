@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.5.5'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.5.6'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -130,9 +130,6 @@ function renderDuo() {
     const userImg = panel.find('.err__duo-img--user');
     if (settings.duoUserAvatar) duoSetAvatar(userImg, settings.duoUserAvatar);
     else duoUserAvatar().then(ua => duoSetAvatar(userImg, ua));
-    // 自定义头像时显示「重置」小按钮
-    panel.find('.err__duo-reset--char').toggle(!!settings.duoCharAvatar);
-    panel.find('.err__duo-reset--user').toggle(!!settings.duoUserAvatar);
     renderDuoChat();
 }
 
@@ -705,16 +702,10 @@ function renderNow() {
     const panel = $('#st-error');
     if (!panel.length) return;
     const s = currentSong();
-    const titleEl = panel.find('.err__now-title');
-    const artistEl = panel.find('.err__now-artist');
     if (s) {
-        titleEl.text(s.title);
-        artistEl.text(s.artist || '未知艺术家');
         panel.find('.err__now-time').text(fmtDur(audio.currentTime || 0));
         panel.find('.err__now-dur').text(fmtDur(s.duration));
     } else {
-        titleEl.text('未在播放');
-        artistEl.text('添加歌曲开始播放');
         panel.find('.err__now-time').text('00:00');
         panel.find('.err__now-dur').text('--:--');
     }
@@ -957,7 +948,6 @@ function buildPanel() {
                   <span class="err__duo-avatar" title="点击更换头像">
                     <span class="err__duo-avatar-fallback">${ICONS.user}</span>
                     <img class="err__duo-img err__duo-img--char" alt="" style="display:none">
-                    <button type="button" class="err__duo-reset err__duo-reset--char" title="恢复默认头像" style="display:none">${ICONS.close}</button>
                   </span>
                   <span class="err__duo-name err__duo-name--char"></span>
                 </div>
@@ -971,7 +961,6 @@ function buildPanel() {
                   <span class="err__duo-avatar" title="点击更换头像">
                     <span class="err__duo-avatar-fallback">${ICONS.user}</span>
                     <img class="err__duo-img err__duo-img--user" alt="" style="display:none">
-                    <button type="button" class="err__duo-reset err__duo-reset--user" title="恢复默认头像" style="display:none">${ICONS.close}</button>
                   </span>
                   <span class="err__duo-name err__duo-name--user">你</span>
                 </div>
@@ -980,10 +969,6 @@ function buildPanel() {
             <div class="err__duo-chat">
               <div class="err__duo-bubble err__duo-bubble--char" title="点击编辑 TA 说的话"><span class="err__duo-bubble-text">点我写 TA 说的话…</span></div>
               <div class="err__duo-bubble err__duo-bubble--user" title="点击编辑你说的话"><span class="err__duo-bubble-text">点我写你说的话…</span></div>
-            </div>
-            <div class="err__now">
-              <div class="err__now-title">未在播放</div>
-              <div class="err__now-artist">添加歌曲开始播放</div>
             </div>
             <div class="err__lrc"></div>
             <div class="err__progress">
@@ -1318,13 +1303,9 @@ function bindPanelEvents() {
         toastr.success('已恢复默认背景');
     });
 
-    // 一起听：点头像换头像、点重置恢复默认
+    // 一起听：点头像换头像
     panel.find('.err__duo-avatar').on('click', function () {
         duoPickAvatar($(this).closest('.err__duo-person').hasClass('err__duo-person--char') ? 'char' : 'user');
-    });
-    panel.find('.err__duo-reset').on('click', function (e) {
-        e.stopPropagation();
-        duoResetAvatar($(this).hasClass('err__duo-reset--char') ? 'char' : 'user');
     });
 
     // 一起听：点气泡编辑 char/user 说的话

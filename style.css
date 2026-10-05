@@ -296,14 +296,17 @@
 /* -------- 一起听：双头像 + 连接 + 氛围对话 -------- */
 .err__duo { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
 
-/* 消息流：头像下方，气泡分别对准各自头像（不挤也不散） */
+/* 消息流：用和头像区完全一致的三列网格，气泡中心天然对准各自头像中心（无需像素偏移） */
 .err__duo-chat {
-    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    display: grid;
+    grid-template-columns: 1fr 72px 1fr;
+    column-gap: 10px;
+    row-gap: 8px;
     width: 100%; max-width: 320px;
 }
 .err__duo-bubble {
     position: relative;
-    max-width: 82%;
+    max-width: 150px;
     padding: 5px 11px;
     border-radius: 12px;
     background: var(--err-sky-bg);
@@ -317,23 +320,25 @@
 .err__duo-bubble:hover { filter: brightness(1.04); }
 .err__duo-bubble:active { transform: scale(0.98); }
 .err__duo-bubble--char {
-    align-self: flex-start; margin-left: 25px;
+    grid-column: 1; grid-row: 1;
+    justify-self: center;
     border-bottom-left-radius: 4px;
 }
 .err__duo-bubble--user {
-    align-self: flex-end; margin-right: 25px;
+    grid-column: 3; grid-row: 2;
+    justify-self: center;
     border-bottom-right-radius: 4px;
     background: var(--err-rose-bg); border-color: #F5C4CF; color: #E68098;
 }
-/* 尾巴对准各自上方的头像中心（头像 64px，居中于等宽 person，偏移 25px + 半宽 32px） */
+/* 尾巴从气泡顶部中央朝上，正对上方头像 */
 .err__duo-bubble--char::after {
-    content: ''; position: absolute; left: 32px; top: -5px;
+    content: ''; position: absolute; left: 50%; margin-left: -4px; top: -5px;
     width: 8px; height: 8px; background: var(--err-sky-bg);
     border-left: 1px solid #CFDDEC; border-top: 1px solid #CFDDEC;
     transform: rotate(45deg);
 }
 .err__duo-bubble--user::after {
-    content: ''; position: absolute; right: 32px; top: -5px;
+    content: ''; position: absolute; left: 50%; margin-left: -4px; top: -5px;
     width: 8px; height: 8px; background: var(--err-rose-bg);
     border-left: 1px solid #EBCFCA; border-top: 1px solid #EBCFCA;
     transform: rotate(45deg);
@@ -363,14 +368,6 @@
 .err__duo-avatar-fallback { display: flex; }
 .err__duo-avatar-fallback svg { width: 30px; height: 30px; }
 .err__duo-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
-.err__duo-reset {
-    position: absolute; top: -2px; right: -2px; z-index: 2;
-    width: 20px; height: 20px; border-radius: 50%;
-    border: 1px solid var(--err-border-2); background: var(--err-surface); color: var(--err-text-3);
-    display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
-}
-.err__duo-reset:hover { color: var(--err-danger); border-color: var(--err-danger); }
-.err__duo-reset svg { width: 11px; height: 11px; }
 
 .err__duo-name--char { color: var(--err-sky-deep) !important; }
 .err__duo-name--user { color: #B26F69 !important; }
@@ -420,19 +417,6 @@
 }
 .err__chat-input:focus { outline: none; border-color: var(--err-rose); }
 
-/* 当前曲目 */
-.err__now { text-align: center; max-width: 100%; padding: 0 8px; }
-.err__now-title {
-    font-family: var(--err-serif);
-    font-size: 20px;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.err__now-artist { font-size: 12px; color: var(--err-lilac-deep); margin-top: 4px; }
-
 /* 进度 */
 .err__progress {
     display: flex;
@@ -443,13 +427,20 @@
 }
 .err__now-time, .err__now-dur { font-size: 11px; color: var(--err-text-3); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
 
-/* 控制 */
+/* 控制：五列网格，播放键在第 3 列正中（两侧对称散开，第 5 列为对称留白） */
 .err__controls {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: 44px 44px 60px 44px 44px;
+    column-gap: 40px;
     justify-content: center;
-    gap: 42px;
+    align-items: center;
+    width: 100%;
+    max-width: 420px;
 }
+.err__loop { grid-column: 1; justify-self: center; }
+.err__prev { grid-column: 2; justify-self: center; }
+.err__play-toggle { grid-column: 3; justify-self: center; }
+.err__next { grid-column: 4; justify-self: center; }
 .err__ctrl {
     border: none;
     background: transparent;
@@ -749,14 +740,10 @@ input[type="range"].err__seek::-moz-range-thumb {
     .err__duo-avatar { width: 56px; height: 56px; }
     .err__duo-avatar-fallback svg { width: 28px; height: 28px; }
     .err__duo-link { width: 52px; height: 36px; margin-top: 10px; }
-    /* 移动端头像 56px：person 等宽后偏移 34px + 半宽 28px，尾巴仍对准头像中心 */
-    .err__duo-bubble--char { margin-left: 34px; }
-    .err__duo-bubble--user { margin-right: 34px; }
-    .err__duo-bubble--char::after { left: 28px; }
-    .err__duo-bubble--user::after { right: 28px; }
-    .err__now-title { font-size: 17px; }
-    .err__controls { gap: 30px; }
+    /* 移动端中间连线 52px，气泡网格同步改列宽即可自动对准 */
+    .err__duo-chat { grid-template-columns: 1fr 52px 1fr; }
     .err__play-toggle { width: 46px; height: 46px; }
+    .err__controls { grid-template-columns: 38px 38px 52px 38px 38px; column-gap: 26px; }
     .err__lrc { padding: 4px 16px 10px; }
     .err__home-hero { padding: 26px 18px 16px; }
     .err__home-avatar { width: 84px; height: 84px; }
