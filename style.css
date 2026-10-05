@@ -307,43 +307,50 @@
 .err__duo-bubble {
     position: relative;
     max-width: 150px;
-    padding: 5px 11px;
-    border-radius: 12px;
-    background: var(--err-sky-bg);
-    border: 1px solid #C7DDF0;
-    box-shadow: 0 2px 7px rgba(163, 120, 110, 0.10);
-    font-size: 12px; line-height: 1.5; color: var(--err-sky-deep);
-    min-height: 18px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    font-size: 13px; line-height: 1.6;
+    min-height: 0;
     cursor: pointer;
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
     transition: filter 0.15s, transform 0.1s;
 }
-.err__duo-bubble:hover { filter: brightness(1.04); }
+.err__duo-bubble:hover { filter: brightness(1.08); }
 .err__duo-bubble:active { transform: scale(0.98); }
 .err__duo-bubble--char {
     grid-column: 1; grid-row: 1;
     justify-self: center;
-    border-bottom-left-radius: 4px;
+    color: var(--err-sky-deep);
 }
 .err__duo-bubble--user {
     grid-column: 3; grid-row: 2;
     justify-self: center;
-    border-bottom-right-radius: 4px;
-    background: var(--err-rose-bg); border-color: #F5C4CF; color: #E68098;
+    color: #E68098;
 }
-/* 尾巴从气泡顶部中央朝上，正对上方头像 */
-.err__duo-bubble--char::after {
-    content: ''; position: absolute; left: 50%; margin-left: -4px; top: -5px;
-    width: 8px; height: 8px; background: var(--err-sky-bg);
-    border-left: 1px solid #CFDDEC; border-top: 1px solid #CFDDEC;
-    transform: rotate(45deg);
+/* 说话人小标签（无气泡，用「TA / 你」胶囊标识谁说的） */
+.err__duo-bubble--char::before {
+    content: 'TA';
+    flex: 0 0 auto;
+    font-size: 10px; line-height: 1;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: var(--err-sky-bg);
+    color: var(--err-sky-deep);
 }
-.err__duo-bubble--user::after {
-    content: ''; position: absolute; left: 50%; margin-left: -4px; top: -5px;
-    width: 8px; height: 8px; background: var(--err-rose-bg);
-    border-left: 1px solid #EBCFCA; border-top: 1px solid #EBCFCA;
-    transform: rotate(45deg);
+.err__duo-bubble--user::before {
+    content: '你';
+    flex: 0 0 auto;
+    font-size: 10px; line-height: 1;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: var(--err-rose-bg);
+    color: #E68098;
 }
-.err__duo-bubble-text { display: block; }
+.err__duo-bubble-text { display: block; min-width: 0; }
 
 .err__duo-avatars { display: flex; align-items: flex-start; justify-content: center; gap: 10px; width: 100%; max-width: 320px; }
 

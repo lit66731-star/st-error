@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.5.6'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.5.7'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -116,8 +116,8 @@ function duoSetAvatar(imgEl, url) {
 function renderDuoChat() {
     const panel = $('#st-error');
     if (!panel.length) return;
-    panel.find('.err__duo-bubble--char .err__duo-bubble-text').text(settings.duoCharLine || '点我写 TA 说的话…');
-    panel.find('.err__duo-bubble--user .err__duo-bubble-text').text(settings.duoUserLine || '点我写你说的话…');
+    panel.find('.err__duo-bubble--char .err__duo-bubble-text').text(settings.duoCharLine || '点我写句话…');
+    panel.find('.err__duo-bubble--user .err__duo-bubble-text').text(settings.duoUserLine || '点我回一句…');
 }
 
 function renderDuo() {
@@ -967,8 +967,8 @@ function buildPanel() {
               </div>
             </div>
             <div class="err__duo-chat">
-              <div class="err__duo-bubble err__duo-bubble--char" title="点击编辑 TA 说的话"><span class="err__duo-bubble-text">点我写 TA 说的话…</span></div>
-              <div class="err__duo-bubble err__duo-bubble--user" title="点击编辑你说的话"><span class="err__duo-bubble-text">点我写你说的话…</span></div>
+              <div class="err__duo-bubble err__duo-bubble--char" title="点击编辑 TA 说的话"><span class="err__duo-bubble-text">点我写句话…</span></div>
+              <div class="err__duo-bubble err__duo-bubble--user" title="点击编辑你说的话"><span class="err__duo-bubble-text">点我回一句…</span></div>
             </div>
             <div class="err__lrc"></div>
             <div class="err__progress">
