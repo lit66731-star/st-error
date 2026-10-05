@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.5.1'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.5.2'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -33,6 +33,7 @@ const ICONS = {
     user: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.6 3.6-6 8-6s8 2.4 8 6v1H4z"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
     list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
+    palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 0 0 18c1.6 0 2.1-1 .9-2.2-.9-.9-.4-2.3.8-2.8 1.6-.6 3.3-.4 4.3-1.2.8-.7.7-1.6.2-2.6A9 9 0 0 0 12 3z"/><circle cx="7.5" cy="11.5" r="1.1"/><circle cx="10.6" cy="7.4" r="1.1"/><circle cx="15.2" cy="7.4" r="1.1"/></svg>',
 };
 
 // ---------------- 状态 ----------------
@@ -519,26 +520,6 @@ async function ncmFetch(path) {
     return res.json();
 }
 
-// 拉取网易云个人资料（关注/粉丝/等级/昵称/头像），登录态可用时显示真实数据
-let ncmProfileFetched = false;
-async function fetchNcmProfile() {
-    if (!settings.neteaseApi) return;
-    try {
-        const d = await ncmFetch('/user/account');
-        const p = d && d.profile;
-        if (p) {
-            if (p.follows != null) settings.profile.follows = p.follows;
-            if (p.followeds != null) settings.profile.fans = p.followeds;
-            if (p.level != null) settings.profile.level = p.level;
-            if (p.nickname) settings.profile.nickname = p.nickname;
-            if (p.avatarUrl) settings.profile.avatarUrl = p.avatarUrl;
-            ncmProfileFetched = true;
-            saveSettings();
-            renderHome();
-        }
-    } catch (e) { /* 未登录或接口异常时静默，保持本地占位 */ }
-}
-
 async function ncmSearch(keyword) {
     keyword = (keyword || '').trim();
     if (!keyword) return;
@@ -715,7 +696,6 @@ async function ncmQrPoll() {
             settings.neteaseLoggedIn = true;
             saveSettings();
             syncNcmLoginUi();
-            fetchNcmProfile();
             statusEl.text('登录成功：' + (s.nickname || '网易云'));
             toastr.success('网易云登录成功');
             setTimeout(ncmQrClose, 1200);
@@ -835,6 +815,17 @@ function renderHome() {
     panel.find('.err__stat-level').text('Lv.' + settings.profile.level);
     panel.find('.err__stat-hours').text(fmtHours(settings.profile.listenSeconds));
     renderPlaylists();
+}
+
+function openProfileModal() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    panel.find('.err__pf-nick').val(settings.profile.nickname || '');
+    panel.find('.err__pf-follows').val(settings.profile.follows);
+    panel.find('.err__pf-fans').val(settings.profile.fans);
+    panel.find('.err__pf-level').val(settings.profile.level);
+    panel.find('.err__pf-hours').val(Math.round((settings.profile.listenSeconds || 0) / 3600));
+    panel.find('.err__profile-modal').show();
 }
 
 function renderPlaylists() {
@@ -988,7 +979,6 @@ function buildPanel() {
               <span class="err__playlist-title">歌单</span>
               <button type="button" class="err__playlist-add-song" title="添加歌曲">${ICONS.plus}</button>
             </div>
-            <div class="err__lrc"></div>
             <div class="err__playlist-songs"></div>
           </div>
         </section>
@@ -1070,14 +1060,6 @@ function buildPanel() {
               </div>
               <div class="err__ncm-results"></div>
             </div>
-            <div class="err__set-head err__set-head--look">
-              <span class="err__label">外观</span>
-              <span class="err__set-hint">更换整个面板背景</span>
-            </div>
-            <div class="err__look-row">
-              <button type="button" class="err__bg-btn">${ICONS.folder} 更换背景</button>
-              <button type="button" class="err__bg-reset">恢复默认</button>
-            </div>
             <div class="err__set-head err__set-head--add">
               <span class="err__label">添加歌曲</span>
             </div>
@@ -1094,12 +1076,27 @@ function buildPanel() {
             <div class="err__list"></div>
           </div>
         </section>
+
+        <!-- 主题：外观 -->
+        <section class="err__page" data-page="theme">
+          <div class="err__theme">
+            <div class="err__set-head">
+              <span class="err__label">外观</span>
+              <span class="err__set-hint">更换整个面板背景</span>
+            </div>
+            <div class="err__look-row">
+              <button type="button" class="err__bg-btn">${ICONS.folder} 更换背景</button>
+              <button type="button" class="err__bg-reset">恢复默认</button>
+            </div>
+          </div>
+        </section>
       </div>
 
       <div class="err__dock">
         <button type="button" class="err__dock-btn" data-page="home" title="主页">${ICONS.home}<span>主页</span></button>
         <button type="button" class="err__dock-btn is-on" data-page="player" title="播放器">${ICONS.player}<span>播放器</span></button>
         <button type="button" class="err__dock-btn" data-page="settings" title="设置">${ICONS.gear}<span>设置</span></button>
+        <button type="button" class="err__dock-btn" data-page="theme" title="主题">${ICONS.palette}<span>主题</span></button>
       </div>
 
       <div class="err__qr-modal" style="display:none">
@@ -1141,6 +1138,28 @@ function buildPanel() {
           </div>
         </div>
       </div>
+
+      <div class="err__profile-modal" style="display:none">
+        <div class="err__pl-box">
+          <div class="err__pl-head">
+            <span>编辑资料</span>
+            <button type="button" class="err__profile-close" title="关闭">${ICONS.close}</button>
+          </div>
+          <div class="err__profile-field"><label>昵称</label><input type="text" class="err__pf-nick" placeholder="音乐爱好者"></div>
+          <div class="err__profile-row">
+            <div class="err__profile-field"><label>关注</label><input type="number" class="err__pf-follows" min="0" step="1"></div>
+            <div class="err__profile-field"><label>粉丝</label><input type="number" class="err__pf-fans" min="0" step="1"></div>
+          </div>
+          <div class="err__profile-row">
+            <div class="err__profile-field"><label>等级</label><input type="number" class="err__pf-level" min="0" step="1"></div>
+            <div class="err__profile-field"><label>听歌时长(小时)</label><input type="number" class="err__pf-hours" min="0" step="1"></div>
+          </div>
+          <div class="err__pl-actions">
+            <button type="button" class="err__profile-cancel">取消</button>
+            <button type="button" class="err__profile-ok">保存</button>
+          </div>
+        </div>
+      </div>
     </div>`;
     $('body').append(html);
     bindPanelEvents();
@@ -1154,6 +1173,38 @@ function bindPanelEvents() {
 
     // 底部 Dock 三页切换
     panel.find('.err__dock-btn').on('click', function () { switchPage($(this).data('page')); });
+
+    // 主页：点头像换头像、点昵称/资料打开编辑
+    panel.find('.err__home-avatar').on('click', () => {
+        const input = $('<input type="file" accept="image/*">');
+        input.on('change', async function () {
+            const file = this.files && this.files[0];
+            if (!file) return;
+            try {
+                settings.profile.avatarUrl = await duoResizeImage(file, 400);
+                saveSettings();
+                renderHome();
+                toastr.success('头像已更换');
+            } catch (err) { toastr.error('图片处理失败'); }
+        });
+        input.trigger('click');
+    });
+    panel.find('.err__home-name, .err__home-stat').on('click', openProfileModal);
+    panel.find('.err__profile-close, .err__profile-cancel').on('click', () => panel.find('.err__profile-modal').hide());
+    panel.find('.err__profile-modal').on('click', function (e) { if (e.target === this) $(this).hide(); });
+    panel.find('.err__profile-ok').on('click', () => {
+        const nick = panel.find('.err__pf-nick').val().trim();
+        if (nick) settings.profile.nickname = nick;
+        settings.profile.follows = Math.max(0, parseInt(panel.find('.err__pf-follows').val(), 10) || 0);
+        settings.profile.fans = Math.max(0, parseInt(panel.find('.err__pf-fans').val(), 10) || 0);
+        settings.profile.level = Math.max(0, parseInt(panel.find('.err__pf-level').val(), 10) || 0);
+        const hours = Math.max(0, parseInt(panel.find('.err__pf-hours').val(), 10) || 0);
+        settings.profile.listenSeconds = hours * 3600;
+        saveSettings();
+        panel.find('.err__profile-modal').hide();
+        renderHome();
+        toastr.success('资料已更新');
+    });
 
     // 主页：创建歌单
     panel.find('.err__playlist-add').on('click', () => {
@@ -1405,7 +1456,6 @@ jQuery(async () => {
     buildButton();
     buildPanel();
     applyPanelBg();
-    if (settings.neteaseApi) setTimeout(fetchNcmProfile, 300);
 
     // 音频事件
     audio.addEventListener('play', () => { playing = true; renderControls(); renderNow(); });

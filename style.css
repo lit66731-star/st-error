@@ -70,14 +70,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 20px 32px 16px;
-    border-bottom: 1px solid var(--err-border);
     flex: 0 0 auto;
     position: relative;
-}
-.err__head::after {
-    content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
-    background: linear-gradient(90deg, var(--err-rose), var(--err-rose-deep));
-    opacity: 0.75;
 }
 .err__brand { display: flex; align-items: baseline; gap: 9px; }
 .err__title {
@@ -131,15 +125,20 @@
 .err__home-avatar {
     width: 96px; height: 96px; border-radius: 50%;
     background: var(--err-rose-bg); display: flex; align-items: center; justify-content: center;
-    position: relative; overflow: hidden;
+    position: relative; overflow: hidden; cursor: pointer;
     box-shadow: 0 0 0 4px #fff, 0 8px 22px rgba(230, 128, 152, 0.28);
+    transition: box-shadow 0.15s, transform 0.15s;
 }
+.err__home-avatar:hover { box-shadow: 0 0 0 4px #fff, 0 0 0 6px var(--err-rose-bg), 0 8px 22px rgba(230, 128, 152, 0.28); }
+.err__home-avatar:active { transform: scale(0.96); }
 .err__home-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .err__home-avatar-fallback { color: var(--err-rose-deep); }
 .err__home-avatar-fallback svg { width: 44px; height: 44px; }
-.err__home-name { font-family: var(--err-serif); font-size: 22px; font-weight: 500; margin-top: 14px; }
+.err__home-name { font-family: var(--err-serif); font-size: 22px; font-weight: 500; margin-top: 14px; cursor: pointer; border-radius: 8px; padding: 2px 10px; transition: background 0.15s; }
+.err__home-name:hover { background: var(--err-rose-bg); }
 .err__home-stats { display: flex; gap: 34px; margin-top: 18px; }
-.err__home-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.err__home-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; border-radius: 10px; padding: 4px 8px; transition: background 0.15s; }
+.err__home-stat:hover { background: var(--err-rose-bg); }
 .err__home-stat b { font-size: 17px; font-weight: 600; color: var(--err-text); }
 .err__home-stat span { font-size: 12px; color: var(--err-text-3); }
 .err__home-section { padding: 6px 22px 30px; }
@@ -223,9 +222,24 @@
 .err__pl-ok { background: var(--err-rose); color: #fff; border-color: var(--err-rose); }
 .err__pl-ok:hover { background: var(--err-rose-deep); }
 
+/* -------- 编辑资料弹窗 -------- */
+.err__profile-modal { position: absolute; inset: 0; background: rgba(92, 74, 80, 0.28); display: flex; align-items: center; justify-content: center; z-index: 30; padding: 24px; }
+.err__profile-close { width: 26px; height: 26px; border: none; background: transparent; color: var(--err-text-3); border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.err__profile-close svg { width: 14px; height: 14px; }
+.err__profile-close:hover { background: var(--err-surface-2); color: var(--err-text); }
+.err__profile-field { display: flex; flex-direction: column; gap: 4px; }
+.err__profile-field label { font-size: 12px; color: var(--err-text-2); }
+.err__profile-field input { width: 100%; height: 36px; padding: 0 12px; border: 1px solid var(--err-border-2); border-radius: 12px; font: inherit; box-sizing: border-box; background: var(--err-bg); color: var(--err-text); }
+.err__profile-field input:focus { outline: none; border-color: var(--err-rose); }
+.err__profile-row { display: flex; gap: 10px; }
+.err__profile-row .err__profile-field { flex: 1; min-width: 0; }
+.err__profile-field + .err__profile-row, .err__profile-row + .err__profile-row { margin-top: 10px; }
+
 /* -------- 设置页：接音乐 APP -------- */
 .err__set { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 22px 26px 40px; }
 .err__set > * { max-width: 620px; margin-left: auto; margin-right: auto; }
+.err__theme { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 22px 26px 40px; }
+.err__theme > * { max-width: 620px; margin-left: auto; margin-right: auto; }
 .err__set-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
 .err__set-head--add, .err__set-head--list { margin-top: 22px; }
 .err__set-hint { font-size: 12px; color: var(--err-text-3); }
