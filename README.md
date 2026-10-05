@@ -1,6 +1,6 @@
-# error · 音乐播放器
+# Error · 音乐播放器
 
-SillyTavern 第三方扩展，界面仿**网易云音乐**，配色沿用 Serendipity 的暖白 + 灰玫瑰体系。
+SillyTavern 第三方扩展，界面仿**网易云音乐**，配色采用暖白底 + 多色分工（玫瑰/杏/鼠尾草/雾蓝/藕紫，各司其职，不再全面板单色循环）。
 
 - **一起听**：角色 + 你的双头像、中间漂浮音符/爱心、头像上方两条小巧的消息气泡（内置氛围文案，可自改并保存，随机轮换）
 - 播放列表 + 底部控制（播放/暂停、上一首/下一首、进度、音量）
@@ -20,20 +20,29 @@ SillyTavern 第三方扩展，界面仿**网易云音乐**，配色沿用 Serend
 
 插件本身不内置网易云接口，需要一个自建的 **NeteaseCloudMusicApi** 服务当后端（登录态存在服务端，能拿到 320k 音质；会员歌视账号权益）：
 
-1. 在服务器上跑 NeteaseCloudMusicApi（Node，开源项目，与 error 插件无代码耦合）：
+1. 在服务器上跑 NeteaseCloudMusicApi（Node，开源项目，与 Error 插件无代码耦合）：
    ```bash
    # Docker 方式（推荐）
    docker run -d --name ncm -p 3000:3000 binaryify/netease_cloud_music_api
    # 或 Node 方式
    git clone https://github.com/Binaryify/NeteaseCloudMusicApi && cd NeteaseCloudMusicApi && npm i && node app.js
    ```
-2. 打开 error 面板 → 网易云栏点「齿轮」→ 填 API 地址（如 `http://你的服务器:3000`）→ 保存。
+2. 打开 Error 面板 → 网易云栏点「齿轮」→ 填 API 地址（如 `http://你的服务器:3000`）→ 保存。
 3. 登录（二选一）：
    - **Cookie 登录（推荐，绕开机房 IP 风控）**：在自己电脑浏览器登录 `music.163.com` → F12 → Application → Cookies → `music.163.com` → 复制 `MUSIC_U` 的值，粘到齿轮里的「MUSIC_U cookie」框 → 保存。云端 API 请求会带上这个登录态，扫码那种「设备环境异常」就不会再出现。
    - 扫码登录：点「扫码」，用网易云音乐 App 扫。若你的服务器是机房 IP（阿里云/腾讯云等），扫码大概率被网易风控拦截，改用上面的 Cookie 登录即可。
 4. 搜索、点歌即可；播放地址按需解析，5 分钟内复用缓存。
 
 > 注意：把 API 端口暴露到公网前，建议用 nginx 反代到同源路径并加访问控制，避免他人滥用你的登录态。
+
+## 三平台「免后端」接入调研（暂未实现）
+
+> 结论先行：**网易云 / QQ 音乐**可做；**酷狗**目前没有可靠的免后端方案，只留占位。
+
+- **网易云**：粘贴链接/ID 解析稳定；`music.163.com/api/search/get`（搜索）、`/api/song/lyric`（歌词）、`/api/song/detail`（详情/封面）都返回 JSON，但**无 CORS 头**，浏览器直连会被拦，需走酒馆 `/proxy/`（`config.yaml` 开 `enableCorsProxy`）。公开外链 `outer/url` 在海外 IP 上实测会 302 到 404，不可靠。建议：搜索/详情走公共 Meting 聚合（`api.injahow.cn/meting`、`met.liiiu.cn`、`meting-api-omega.vercel.app`，ACAO=`*`，免 key）取直链/歌词/封面。
+- **QQ 音乐**：`u.y.qq.com/cgi-bin/musicu.fcg`（搜索）、`c.y.qq.com/.../fcg_play_single_song.fcg`（详情）可用但无 CORS；封面 `y.gtimg.cn` 可直接 `<img>` 加载。播放直链需 vkey 签名，建议走 `api.vkeys.cn/v2/music/tencent`（搜索/详情/歌词/试听直链可用，付费歌仅试听）。
+- **酷狗**：搜索接口限流严重（连续请求 total=0），歌词/播放均被风控，聚合 API（Meting kugou）也解不出，**暂无可用方案**，留 provider 占位让用户自填 base。
+- **共性**：这些公共实例是个人站、随时可能失效；VIP/付费歌大多只能试听；`<audio>` 播放直链不需要 CORS，但直链有时效（现有 5 分钟缓存可复用）。等确定要落地再实现「一个输入框自动识别平台 + 可编辑的 provider base + 失败降级」。
 
 ## 安装
 
@@ -50,6 +59,7 @@ SillyTavern 第三方扩展，界面仿**网易云音乐**，配色沿用 Serend
 
 ## 更新记录
 
+- **1.4.0**：插件更名 **Error**（面板标题/清单名/README，本地数据 key 不变、老歌单不丢）；面板改多色分工——玫瑰=品牌/情感、杏=播放/进度、鼠尾草=在听/成功、雾蓝=对方气泡/链接/焦点、藕紫=本地/次要，头部加五色渐变细线，进度/音量条改为渐变填充（杏→玫瑰 / 鼠尾草），当前行、来源图标、播放按钮等各用专属色，不再单一颜色循环。另已调研三平台「免后端」接入可行性（详见下节，暂未落地实现）。
 - **1.3.0**：歌源抽成统一适配器（`url` / `local` / `netease`，各自实现 `resolve`，为接入更多平台留位置）；新增**粘贴网易云链接或歌曲 ID** 直接添加——识别 `music.163.com/#/song?id=`、`/song/<id>`、手机分享链接和纯数字 ID，未配置 API 时走公开外链 `music.163.com/song/media/outer/url` 播放（免登录、免后端）；已配置 API 时自动补歌名/歌手/封面并加载歌词。README 安装说明改为 Git 地址方式。
 - **1.2.2**：漂浮音符/爱心改成横着铺在两个头像之间，各自不规则上下浮动（不再竖向上升）。
 - **1.2.1**：一起听升级——点击头像可自行更换并保存（可一键恢复默认）；漂浮音符/爱心加深配色保证可见；气泡改成头像上方一上一下的两条消息流，内容改用内置氛围文案（不调 API），新增「氛围文案」编辑弹窗，可逐行修改、保存，播放时随机轮换。

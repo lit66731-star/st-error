@@ -1,12 +1,12 @@
 /* ==========================================================================
-   error · 音乐播放器（SillyTavern 第三方扩展）
-   界面仿网易云音乐，配色沿用 Serendipity 的暖白 + 灰玫瑰体系。
+   Error · 音乐播放器（SillyTavern 第三方扩展）
+   界面仿网易云音乐，暖白底 + 玫瑰/杏/鼠尾草/雾蓝/藕紫 多色分工。
    歌源：本地文件（存 IndexedDB）+ 直链 URL + 网易云（需自建 NeteaseCloudMusicApi）；
    播放内核用 HTML5 Audio。
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.3.0'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.4.0'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -390,7 +390,7 @@ function setVolume(v) {
     settings.volume = Math.max(0, Math.min(1, v));
     audio.volume = settings.volume;
     saveSettings();
-    $('#st-error .err__vol-input').val(Math.round(settings.volume * 100));
+    $('#st-error .err__vol-input').val(Math.round(settings.volume * 100)).css('--seek', Math.round(settings.volume * 100) + '%');
 }
 
 // ---------------- 歌单操作 ----------------
@@ -733,7 +733,7 @@ function renderList() {
                 <div class="err__row-title">${escapeHtml(s.title)}</div>
                 <div class="err__row-artist">${escapeHtml(s.artist || '未知艺术家')}</div>
             </div>
-            <span class="err__row-src">${s.source === 'local' ? ICONS.folder : s.source === 'netease' ? ICONS.cloud : ICONS.link}</span>
+            <span class="err__row-src err__row-src--${s.source}">${s.source === 'local' ? ICONS.folder : s.source === 'netease' ? ICONS.cloud : ICONS.link}</span>
             <span class="err__row-dur">${fmtDur(s.duration)}</span>
             <button type="button" class="err__row-del" data-id="${s.id}" title="删除">${ICONS.trash}</button>
         </div>`);
@@ -756,7 +756,7 @@ function buildPanel() {
     <div id="st-error" class="err" style="display:none">
       <div class="err__head">
         <div class="err__brand">
-          <span class="err__title">error</span>
+          <span class="err__title">Error</span>
           <span class="err__version">v${VERSION}</span>
         </div>
         <button type="button" class="err__close" title="关闭">${ICONS.close}</button>
@@ -987,13 +987,13 @@ function bindPanelEvents() {
 
     // 进度 / 音量
     let seeking = false;
-    panel.find('.err__seek').on('input', function () { seeking = true; });
+    panel.find('.err__seek').on('input', function () { seeking = true; const m = parseFloat(this.max) || 0; $(this).css('--seek', (m ? this.value / m * 100 : 0) + '%'); });
     panel.find('.err__seek').on('change', function () {
         const v = parseFloat(this.value);
         if (isFinite(v) && audio.duration) { audio.currentTime = v; }
         seeking = false;
     });
-    panel.find('.err__vol-input').on('input', function () { setVolume(parseInt(this.value, 10) / 100); });
+    panel.find('.err__vol-input').on('input', function () { $(this).css('--seek', this.value + '%'); setVolume(parseInt(this.value, 10) / 100); });
 
     // 点击进度条区域不冒泡到面板
     panel.find('.err__progress').on('click', (e) => e.stopPropagation());
@@ -1060,7 +1060,7 @@ jQuery(async () => {
         if (!p.length || !p.is(':visible')) return;
         const d = audio.duration;
         if (isFinite(d) && d > 0) {
-            p.find('.err__seek').attr('max', d).val(audio.currentTime);
+            p.find('.err__seek').attr('max', d).val(audio.currentTime).css('--seek', (audio.currentTime / d * 100) + '%');
         }
         p.find('.err__now-time').text(fmtDur(audio.currentTime));
         updateLyricTime(audio.currentTime);
@@ -1083,6 +1083,6 @@ jQuery(async () => {
 // ST 自动更新扩展后会调用 manifest.hooks.update 指向的这个函数（此时新代码已 git pull 到磁盘），
 // 在这里刷新页面以加载新版本，无需手动刷新。
 export function reloadOnUpdate() {
-    toastr.info('error 音乐播放器已更新，正在刷新页面以应用新版本...', undefined, { timeOut: 1500 });
+    toastr.info('Error 音乐播放器已更新，正在刷新页面以应用新版本...', undefined, { timeOut: 1500 });
     setTimeout(() => location.reload(), 1500);
 }
