@@ -329,6 +329,7 @@
 .err__duo-bubble--user {
     grid-column: 3; grid-row: 1;
     justify-self: center;
+    flex-direction: row-reverse;
     color: #E68098;
 }
 /* 说话人小标签（无气泡，用「TA / 你」胶囊标识谁说的） */
