@@ -45,6 +45,9 @@
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     box-sizing: border-box;
     background: var(--err-bg);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     border: none;
     color: var(--err-text);
     font-size: 13px;
@@ -151,28 +154,28 @@
 .err__playlist-add:hover { background: var(--err-rose-deep); }
 .err__playlist-add:active { transform: scale(0.94); }
 
-.err__playlists { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
-.err__pl-card {
-    position: relative; display: flex; flex-direction: column;
-    background: var(--err-surface); border: 1px solid var(--err-border);
-    border-radius: 16px; padding: 12px; cursor: pointer;
-    box-shadow: 0 4px 14px rgba(230, 128, 152, 0.08);
-    transition: transform 0.15s, box-shadow 0.15s;
+.err__playlists { display: flex; flex-direction: column; gap: 10px; }
+.err__pl-row {
+    position: relative; display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; cursor: pointer; border-radius: 14px;
+    transition: background 0.15s, transform 0.1s;
 }
-.err__pl-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(230, 128, 152, 0.16); }
+.err__pl-row:hover { background: var(--err-surface-2); }
+.err__pl-row:active { transform: scale(0.985); }
 .err__pl-cover {
-    width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden;
+    width: 52px; height: 52px; flex: 0 0 auto; border-radius: 12px; overflow: hidden;
     background: var(--err-rose-bg); display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: transform 0.15s;
 }
+.err__pl-cover:hover { transform: scale(1.06); }
 .err__pl-cover img { width: 100%; height: 100%; object-fit: cover; }
 .err__pl-cover--empty { color: var(--err-rose-deep); }
-.err__pl-cover--empty svg { width: 34px; height: 34px; }
-.err__pl-info { margin-top: 10px; padding-right: 18px; }
+.err__pl-cover--empty svg { width: 24px; height: 24px; }
+.err__pl-info { flex: 1; min-width: 0; }
 .err__pl-name { font-size: 14px; font-weight: 500; color: var(--err-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .err__pl-meta { font-size: 12px; color: var(--err-text-3); margin-top: 2px; }
 .err__pl-del {
-    position: absolute; right: 8px; bottom: 8px;
-    width: 26px; height: 26px; border: none; background: transparent; color: var(--err-text-3);
+    width: 30px; height: 30px; flex: 0 0 auto; border: none; background: transparent; color: var(--err-text-3);
     border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;
     transition: color 0.15s, background 0.15s;
 }
@@ -656,6 +659,25 @@
 .err__ncm-dur { flex: 0 0 auto; font-size: 11px; color: var(--err-text-3); font-variant-numeric: tabular-nums; }
 .err__ncm-hint { padding: 14px; text-align: center; font-size: 12px; color: var(--err-text-3); }
 
+/* 外观：更换面板背景 */
+.err__set-head--look { margin-top: 22px; }
+.err__look-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.err__bg-btn, .err__bg-reset {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 34px; padding: 0 14px; font-size: 12px; cursor: pointer;
+    border-radius: 12px; transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+}
+.err__bg-btn {
+    background: var(--err-rose); color: #fff; border: 1px solid var(--err-rose);
+}
+.err__bg-btn svg { width: 15px; height: 15px; }
+.err__bg-btn:hover { background: var(--err-rose-deep); border-color: var(--err-rose-deep); }
+.err__bg-reset {
+    background: var(--err-surface); color: var(--err-text-2); border: 1px solid var(--err-border-2);
+}
+.err__bg-reset:hover { color: var(--err-text); background: var(--err-surface-2); }
+.err__bg-btn:active, .err__bg-reset:active { transform: scale(0.94); }
+
 /* 歌词（当前句 + 翻译） */
 .err__lyric { text-align: center; max-width: 100%; padding: 0 8px; }
 .err__lyric-line { font-size: 14px; color: #B26F69; font-weight: 500; line-height: 1.5; min-height: 20px; }
@@ -751,7 +773,7 @@ input[type="range"].err__vol-input::-moz-range-thumb {
     .err__home-name { font-size: 20px; }
     .err__home-stats { gap: 26px; }
     .err__home-section { padding: 4px 16px 24px; }
-    .err__playlists { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+    .err__playlists { gap: 6px; }
     .err__set { padding: 16px 18px 40px; }
     .err__dock { margin-bottom: calc(10px + env(safe-area-inset-bottom)); padding: 5px; gap: 4px; }
     .err__dock-btn { min-width: 60px; padding: 7px 13px; gap: 3px; }

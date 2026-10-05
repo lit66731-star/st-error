@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.5.0'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.5.1'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -45,7 +45,7 @@ const LOOP_MODES = [
 let settings = {
     songs: [],          // { id, title, artist, source: 'url'|'local'|'netease', url?, fileId?, ncmId?, cover?, duration? }
     playlists: [],      // 歌单 [{ id, name, songIds: [songId...] }]
-    profile: { follows: 0, fans: 0, level: 0, listenSeconds: 0 }, // 个人主页资料（关注/粉丝/等级/听歌时长）
+    profile: { follows: 0, fans: 0, level: 0, listenSeconds: 0, nickname: '', avatarUrl: '', bg: '' }, // 个人主页资料；nickname/avatarUrl 可来自网易云，bg=面板背景
     currentIndex: -1,
     loopMode: 'list',
     volume: 0.8,
@@ -226,7 +226,7 @@ function loadSettings() {
             if (!Array.isArray(settings.songs)) settings.songs = [];
         }
     } catch (e) { settings.songs = []; }
-    if (!settings.profile) settings.profile = { follows: 0, fans: 0, level: 0, listenSeconds: 0 };
+    if (!settings.profile) settings.profile = { follows: 0, fans: 0, level: 0, listenSeconds: 0, nickname: '', avatarUrl: '', bg: '' };
     ensurePlaylists();
 }
 
@@ -519,6 +519,26 @@ async function ncmFetch(path) {
     return res.json();
 }
 
+// 拉取网易云个人资料（关注/粉丝/等级/昵称/头像），登录态可用时显示真实数据
+let ncmProfileFetched = false;
+async function fetchNcmProfile() {
+    if (!settings.neteaseApi) return;
+    try {
+        const d = await ncmFetch('/user/account');
+        const p = d && d.profile;
+        if (p) {
+            if (p.follows != null) settings.profile.follows = p.follows;
+            if (p.followeds != null) settings.profile.fans = p.followeds;
+            if (p.level != null) settings.profile.level = p.level;
+            if (p.nickname) settings.profile.nickname = p.nickname;
+            if (p.avatarUrl) settings.profile.avatarUrl = p.avatarUrl;
+            ncmProfileFetched = true;
+            saveSettings();
+            renderHome();
+        }
+    } catch (e) { /* 未登录或接口异常时静默，保持本地占位 */ }
+}
+
 async function ncmSearch(keyword) {
     keyword = (keyword || '').trim();
     if (!keyword) return;
@@ -695,6 +715,7 @@ async function ncmQrPoll() {
             settings.neteaseLoggedIn = true;
             saveSettings();
             syncNcmLoginUi();
+            fetchNcmProfile();
             statusEl.text('登录成功：' + (s.nickname || '网易云'));
             toastr.success('网易云登录成功');
             setTimeout(ncmQrClose, 1200);
@@ -790,15 +811,24 @@ function fmtHours(sec) {
     return Math.floor((sec || 0) / 3600) + 'h';
 }
 
+function applyPanelBg() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const bg = settings.profile && settings.profile.bg;
+    panel.css('background-image', bg ? `url("${bg}")` : 'none');
+    panel.toggleClass('err--has-bg', !!bg);
+}
+
 // ---------------- 主页（仿网易云个人主页） ----------------
 function renderHome() {
     const panel = $('#st-error');
     if (!panel.length) return;
     const ctx = duoContext();
-    const name = (ctx && (ctx.name1 || ctx.name)) || '音乐爱好者';
+    const name = settings.profile.nickname || (ctx && (ctx.name1 || ctx.name)) || '音乐爱好者';
     panel.find('.err__home-name').text(name);
     const avatar = panel.find('.err__home-avatar-img');
-    if (settings.duoUserAvatar) duoSetAvatar(avatar, settings.duoUserAvatar);
+    if (settings.profile.avatarUrl) duoSetAvatar(avatar, settings.profile.avatarUrl);
+    else if (settings.duoUserAvatar) duoSetAvatar(avatar, settings.duoUserAvatar);
     else duoUserAvatar().then(ua => duoSetAvatar(avatar, ua));
     panel.find('.err__stat-follows').text(settings.profile.follows);
     panel.find('.err__stat-fans').text(settings.profile.fans);
@@ -819,12 +849,10 @@ function renderPlaylists() {
     }
     settings.playlists.forEach((pl) => {
         const songs = playlistSongs(pl.id);
-        const cover = songs.length && songs[0].cover ? songs[0].cover : '';
-        const coverHtml = cover
-            ? `<span class="err__pl-cover"><img src="${escapeHtml(cover)}" alt=""></span>`
-            : `<span class="err__pl-cover err__pl-cover--empty">${ICONS.music}</span>`;
-        box.append(`<div class="err__pl-card" data-id="${pl.id}">
-            ${coverHtml}
+        const cover = pl.cover || (songs.length && songs[0].cover) || '';
+        const coverHtml = cover ? `<img src="${escapeHtml(cover)}" alt="">` : `${ICONS.music}`;
+        box.append(`<div class="err__pl-row" data-id="${pl.id}">
+            <span class="err__pl-cover ${cover ? '' : 'err__pl-cover--empty'}" data-id="${pl.id}" title="点击更换封面">${coverHtml}</span>
             <div class="err__pl-info">
                 <div class="err__pl-name">${escapeHtml(pl.name)}</div>
                 <div class="err__pl-meta">${songs.length} 首</div>
@@ -1042,6 +1070,14 @@ function buildPanel() {
               </div>
               <div class="err__ncm-results"></div>
             </div>
+            <div class="err__set-head err__set-head--look">
+              <span class="err__label">外观</span>
+              <span class="err__set-hint">更换整个面板背景</span>
+            </div>
+            <div class="err__look-row">
+              <button type="button" class="err__bg-btn">${ICONS.folder} 更换背景</button>
+              <button type="button" class="err__bg-reset">恢复默认</button>
+            </div>
             <div class="err__set-head err__set-head--add">
               <span class="err__label">添加歌曲</span>
             </div>
@@ -1137,14 +1173,31 @@ function bindPanelEvents() {
         toastr.success('已创建歌单「' + name + '」');
     });
 
-    // 主页：歌单卡片点击进入详情、删除歌单
-    panel.find('.err__playlists').on('click', '.err__pl-card', function (e) {
-        if ($(e.target).closest('.err__pl-del').length) return;
+    // 主页：歌单行点击进入详情、删除歌单、封面点击换封面
+    panel.find('.err__playlists').on('click', '.err__pl-row', function (e) {
+        if ($(e.target).closest('.err__pl-del, .err__pl-cover').length) return;
         openPlaylist($(this).data('id'));
     });
     panel.find('.err__playlists').on('click', '.err__pl-del', function (e) {
         e.stopPropagation();
         deletePlaylist($(this).data('id'));
+    });
+    panel.find('.err__playlists').on('click', '.err__pl-cover', function (e) {
+        e.stopPropagation();
+        const pl = getPlaylist($(this).data('id'));
+        if (!pl) return;
+        const input = $('<input type="file" accept="image/*">');
+        input.on('change', async function () {
+            const file = this.files && this.files[0];
+            if (!file) return;
+            try {
+                pl.cover = await duoResizeImage(file, 300);
+                saveSettings();
+                renderPlaylists();
+                toastr.success('封面已更换');
+            } catch (err) { toastr.error('图片处理失败'); }
+        });
+        input.trigger('click');
     });
 
     // 歌单详情：返回、添加歌曲（跳到设置页）、点歌播放、从歌单移除
@@ -1231,6 +1284,28 @@ function bindPanelEvents() {
     });
     panel.find('.err__qr-close').on('click', ncmQrClose);
     panel.find('.err__qr-modal').on('click', function (e) { if (e.target === this) ncmQrClose(); });
+
+    // 外观：更换面板背景 / 恢复默认
+    panel.find('.err__bg-btn').on('click', () => {
+        const input = $('<input type="file" accept="image/*">');
+        input.on('change', async function () {
+            const file = this.files && this.files[0];
+            if (!file) return;
+            try {
+                settings.profile.bg = await duoResizeImage(file, 1200);
+                saveSettings();
+                applyPanelBg();
+                toastr.success('背景已更换');
+            } catch (err) { toastr.error('图片处理失败'); }
+        });
+        input.trigger('click');
+    });
+    panel.find('.err__bg-reset').on('click', () => {
+        settings.profile.bg = '';
+        saveSettings();
+        applyPanelBg();
+        toastr.success('已恢复默认背景');
+    });
 
     // 一起听：点头像换头像、点重置恢复默认
     panel.find('.err__duo-avatar').on('click', function () {
@@ -1329,6 +1404,8 @@ jQuery(async () => {
     audio.volume = settings.volume;
     buildButton();
     buildPanel();
+    applyPanelBg();
+    if (settings.neteaseApi) setTimeout(fetchNcmProfile, 300);
 
     // 音频事件
     audio.addEventListener('play', () => { playing = true; renderControls(); renderNow(); });
