@@ -1,30 +1,29 @@
 /* ==========================================================================
    Error · 音乐播放器样式
-   暖白底 + 五色分工：玫瑰（品牌/情感）、杏（播放/进度）、鼠尾草（在听/成功）、
-   雾蓝（对方/链接/焦点）、藕紫（本地/次要）。自适应手机全屏。
+   统一浅粉单色 · 可爱少女风 · 小巧精致。
    ========================================================================== */
 
 #st-error {
     /* —— 设计 token（与 Serendipity 一致） —— */
-    --err-bg: #F8F6F2;
+    --err-bg: #FFF5F6;
     --err-surface: #FFFFFF;
-    --err-surface-2: #FBEFEC;
-    --err-text: #4A3E38;
-    --err-text-2: #9C8C82;
-    --err-text-3: #C3B4AB;
-    --err-border: #F2E3DE;
-    --err-border-2: #E6D1CB;
-    --err-accent: #E8A9A2;
-    --err-accent-deep: #D88683;
-    --err-accent-bg: #FBE8E5;
-    --err-danger: #C97B74;
+    --err-surface-2: #FFEDF0;
+    --err-text: #5C4A50;
+    --err-text-2: #B08C94;
+    --err-text-3: #D8BCC2;
+    --err-border: #F8DCE1;
+    --err-border-2: #F0C9D0;
+    --err-accent: #F5A8BB;
+    --err-accent-deep: #E68098;
+    --err-accent-bg: #FDE4EA;
+    --err-danger: #DB7D8C;
 
-    /* —— 多色分工（每色 = 深色 / 浅底，马卡龙奶彩） —— */
-    --err-rose: #F09AA3;   --err-rose-deep: #E87487; --err-rose-bg: #FDE7EA;
-    --err-apricot: #F5B877; --err-apricot-deep: #EEA15C; --err-apricot-bg: #FCF0DD;
-    --err-sage: #9CC5AA;   --err-sage-deep: #7FB491; --err-sage-bg: #E8F3EC;
-    --err-sky: #A7C3E3;    --err-sky-deep: #8FB2DC; --err-sky-bg: #EAF1F9;
-    --err-lilac: #C0AEE0;  --err-lilac-deep: #AC96D4; --err-lilac-bg: #F0EAF8;
+    /* —— 统一浅粉单色（每色 = 深粉 / 浅粉底，可爱少女风） —— */
+    --err-rose: #F5A8BB;    --err-rose-deep: #E68098;  --err-rose-bg: #FDE4EA;
+    --err-apricot: #F5A8BB; --err-apricot-deep: #E68098; --err-apricot-bg: #FDE4EA;
+    --err-sage: #F5A8BB;    --err-sage-deep: #E68098;  --err-sage-bg: #FDE4EA;
+    --err-sky: #F5A8BB;     --err-sky-deep: #E68098;   --err-sky-bg: #FDE4EA;
+    --err-lilac: #F5A8BB;   --err-lilac-deep: #E68098; --err-lilac-bg: #FDE4EA;
 
     --err-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter,
         "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
@@ -74,13 +73,13 @@
 }
 .err__head::after {
     content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
-    background: linear-gradient(90deg, var(--err-rose), var(--err-apricot), var(--err-sage), var(--err-sky), var(--err-lilac));
+    background: linear-gradient(90deg, var(--err-rose), var(--err-rose-deep));
     opacity: 0.75;
 }
 .err__brand { display: flex; align-items: baseline; gap: 9px; }
 .err__title {
     font-family: var(--err-serif);
-    font-size: 22px;
+    font-size: 19px;
     font-weight: 500;
     letter-spacing: 0.01em;
     line-height: 1.1;
@@ -137,7 +136,7 @@
 .err__home-artist { font-size: 13px; color: var(--err-lilac-deep); margin-top: 4px; }
 .err__lrc { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 20px 28px 44px; }
 .err__lrc-line { padding: 11px 4px; text-align: center; color: var(--err-text-3); transition: color 0.2s, transform 0.2s; }
-.err__lrc-text { font-size: 16px; line-height: 1.5; display: block; }
+.err__lrc-text { font-size: 15px; line-height: 1.55; display: block; }
 .err__lrc-sub { font-size: 12px; color: var(--err-text-3); margin-top: 4px; display: block; }
 .err__lrc-line.is-cur .err__lrc-text { color: var(--err-rose-deep); font-weight: 600; }
 .err__lrc-line.is-cur { transform: scale(1.03); }
@@ -204,7 +203,7 @@
 .err__duo-bubble--char { align-self: flex-start; border-bottom-left-radius: 4px; }
 .err__duo-bubble--user {
     align-self: flex-end; border-bottom-right-radius: 4px;
-    background: var(--err-rose-bg); border-color: #F3CFD4; color: #E87487;
+    background: var(--err-rose-bg); border-color: #F5C4CF; color: #E68098;
 }
 /* 尾巴指向各自头像 */
 .err__duo-bubble--char::after {
@@ -227,7 +226,7 @@
 
 .err__duo-avatar {
     position: relative;
-    width: 92px; height: 92px; border-radius: 50%;
+    width: 84px; height: 84px; border-radius: 50%;
     background: var(--err-accent-bg);
     border: 2px solid #fff;
     box-shadow: 0 0 0 1px var(--err-border-2), 0 8px 24px rgba(163, 120, 110, 0.16);
@@ -236,13 +235,13 @@
     cursor: pointer;
     transition: box-shadow 0.15s;
 }
-.err__duo-person--char .err__duo-avatar { background: var(--err-sky-bg); box-shadow: 0 0 0 2px var(--err-sky), 0 8px 24px rgba(143, 178, 220, 0.25); }
-.err__duo-person--user .err__duo-avatar { background: var(--err-rose-bg); box-shadow: 0 0 0 2px var(--err-rose), 0 8px 24px rgba(232, 116, 135, 0.25); }
+.err__duo-person--char .err__duo-avatar { background: var(--err-sky-bg); box-shadow: 0 0 0 2px var(--err-rose), 0 8px 24px rgba(230, 128, 152, 0.22); }
+.err__duo-person--user .err__duo-avatar { background: var(--err-rose-bg); box-shadow: 0 0 0 2px var(--err-rose), 0 8px 24px rgba(230, 128, 152, 0.22); }
 .err__duo-person--char .err__duo-avatar-fallback { color: var(--err-sky-deep); }
-.err__duo-person--user .err__duo-avatar-fallback { color: #E87487; }
+.err__duo-person--user .err__duo-avatar-fallback { color: var(--err-rose-deep); }
 .err__duo-avatar:hover { filter: brightness(1.03); }
 .err__duo-avatar-fallback { display: flex; }
-.err__duo-avatar-fallback svg { width: 42px; height: 42px; }
+.err__duo-avatar-fallback svg { width: 38px; height: 38px; }
 .err__duo-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .err__duo-reset {
     position: absolute; top: -2px; right: -2px; z-index: 2;
@@ -325,7 +324,7 @@
 }
 .err__lore-reset:hover { background: var(--err-surface-2); color: var(--err-text); }
 .err__lore-save { background: var(--err-rose); color: #fff; border-color: var(--err-rose); }
-.err__lore-save:hover { background: #E87487; color: #fff; }
+.err__lore-save:hover { background: var(--err-rose-deep); color: #fff; }
 
 /* 当前曲目 */
 .err__now { text-align: center; max-width: 100%; padding: 0 8px; }
@@ -428,8 +427,8 @@
 .err__add-url:hover, .err__add-local:hover { background: var(--err-surface-2); color: var(--err-text); border-color: var(--err-border-2); }
 .err__add-url { background: var(--err-apricot); color: #fff; border-color: var(--err-apricot); }
 .err__add-url:hover { background: var(--err-apricot-deep); color: #fff; border-color: var(--err-apricot-deep); }
-.err__add-local { color: var(--err-lilac-deep); border-color: #D6CDE8; background: var(--err-lilac-bg); }
-.err__add-local:hover { background: #E2DAF0; color: var(--err-lilac-deep); border-color: #C6BADF; }
+.err__add-local { color: var(--err-rose-deep); border-color: #F3D2DA; background: var(--err-rose-bg); }
+.err__add-local:hover { background: #FBE0E6; color: var(--err-rose-deep); border-color: #EFC3CD; }
 
 /* 歌单 */
 .err__list {
@@ -473,7 +472,7 @@
     transition: opacity 0.12s, color 0.12s, background 0.12s;
 }
 .err__row:hover .err__row-del { opacity: 1; }
-.err__row-del:hover { color: var(--err-danger); background: rgba(232, 116, 135, 0.12); }
+.err__row-del:hover { color: var(--err-danger); background: rgba(230, 128, 152, 0.12); }
 .err__row-del svg { width: 14px; height: 14px; }
 
 /* 播放中的均衡器动画 */
