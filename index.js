@@ -1,12 +1,12 @@
 /* ==========================================================================
    Error · 音乐播放器（SillyTavern 第三方扩展）
-   界面仿网易云音乐，暖白底 + 玫瑰/杏/鼠尾草/雾蓝/藕紫 多色分工。
+   界面仿网易云音乐，奶白底 + 马卡龙多色分工；双头像之间用动态心电图相连。
    歌源：本地文件（存 IndexedDB）+ 直链 URL + 网易云（需自建 NeteaseCloudMusicApi）；
    播放内核用 HTML5 Audio。
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.4.0'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.4.1'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -779,14 +779,10 @@ function buildPanel() {
                 <span class="err__duo-name err__duo-name--char"></span>
               </div>
               <div class="err__duo-link" aria-hidden="true">
-                <span class="err__float err__float--n1">♪</span>
-                <span class="err__float err__float--h1">♥</span>
-                <span class="err__float err__float--n2">♫</span>
-                <span class="err__float err__float--h2">♥</span>
-                <span class="err__float err__float--n3">♪</span>
-                <span class="err__float err__float--h3">♡</span>
-                <span class="err__float err__float--n4">♪</span>
-                <span class="err__float err__float--h4">♥</span>
+                <svg class="err__ecg" viewBox="0 0 96 44" preserveAspectRatio="none">
+                  <path class="err__ecg-base" d="M0 22 H6 L8 17 L10 22 H13 L15 26 L18 4 L21 26 L23 22 H26 L28 16 L30 22 H32 H38 L40 17 L42 22 H45 L47 26 L50 4 L53 26 L55 22 H58 L60 16 L62 22 H64 H70 L72 17 L74 22 H77 L79 26 L82 4 L85 26 L87 22 H90 L92 16 L94 22 H96"/>
+                  <path class="err__ecg-pulse" d="M0 22 H6 L8 17 L10 22 H13 L15 26 L18 4 L21 26 L23 22 H26 L28 16 L30 22 H32 H38 L40 17 L42 22 H45 L47 26 L50 4 L53 26 L55 22 H58 L60 16 L62 22 H64 H70 L72 17 L74 22 H77 L79 26 L82 4 L85 26 L87 22 H90 L92 16 L94 22 H96"/>
+                </svg>
               </div>
               <div class="err__duo-person err__duo-person--user">
                 <span class="err__duo-avatar" title="点击更换头像">
