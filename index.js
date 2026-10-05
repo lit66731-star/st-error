@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.5.2'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.5.3'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -53,7 +53,8 @@ let settings = {
     neteaseApi: '',     // 网易云 API 地址（NeteaseCloudMusicApi），如 http://127.0.0.1:3000
     neteaseLoggedIn: false,
     neteaseCookie: '',  // 网易云 MUSIC_U cookie（可信设备登录，绕开机房 IP 的风控）
-    duoLore: null,          // 用户自定义氛围文案数组；null=用内置默认
+    duoCharLine: '',        // char 说的话（播放器对话流，点击可改）
+    duoUserLine: '',        // user 说的话
     duoCharAvatar: '',      // 自定义角色头像（dataURL，空=用酒馆角色头像）
     duoUserAvatar: '',      // 自定义你的头像（dataURL，空=用酒馆用户头像）
 };
@@ -71,37 +72,15 @@ let audio = new Audio();
 let playing = false;
 let currentObjectUrl = null; // 本地文件播放时的 object URL，切换时 revoke
 
-// ---------------- 一起听（双头像 + 内置氛围对话） ----------------
-const DUO_DEFAULT_LORE = [
-    '一起听歌的感觉真好', '耳机分你一半', '这首歌好有感觉', '前奏一响就沦陷了',
-    '♪ 好听到想循环', '和喜欢的人听喜欢的歌', '这一刻想按下暂停', '循环一整天都不腻',
-    '今晚的 BGM 就交给你了', '嘘，用心听', '想把这句歌词唱给你', '有点上头了',
-];
-
+// ---------------- 一起听（双头像 + 可编辑对话流） ----------------
 let duoPersonas = null;   // 延迟加载 personas.js 拿 user_avatar
-let duoLoreTimer = null;  // 播放时轮换氛围文案
+let chatEditTarget = 'char'; // 对话流编辑目标：'char' | 'user'
 let activePlaylistId = null; // 当前浏览的歌单（歌单详情页），null=个人主页视图
 
 function duoContext() {
     try {
         return (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
     } catch (e) { return null; }
-}
-
-function duoLoreLines() {
-    const arr = Array.isArray(settings.duoLore) ? settings.duoLore.filter(x => String(x).trim()) : DUO_DEFAULT_LORE;
-    return arr.length ? arr : DUO_DEFAULT_LORE;
-}
-
-function duoPickLine(exclude) {
-    const lines = duoLoreLines();
-    if (lines.length === 1) return lines[0];
-    let line = lines[Math.floor(Math.random() * lines.length)];
-    if (exclude != null && lines.length > 1) {
-        let guard = 0;
-        while (line === exclude && guard++ < 10) line = lines[Math.floor(Math.random() * lines.length)];
-    }
-    return line;
 }
 
 async function duoUserAvatar() {
@@ -137,9 +116,8 @@ function duoSetAvatar(imgEl, url) {
 function renderDuoChat() {
     const panel = $('#st-error');
     if (!panel.length) return;
-    const charLine = duoPickLine();
-    panel.find('.err__duo-bubble--char .err__duo-bubble-text').text(charLine);
-    panel.find('.err__duo-bubble--user .err__duo-bubble-text').text(duoPickLine(charLine));
+    panel.find('.err__duo-bubble--char .err__duo-bubble-text').text(settings.duoCharLine || '点我写 TA 说的话…');
+    panel.find('.err__duo-bubble--user .err__duo-bubble-text').text(settings.duoUserLine || '点我写你说的话…');
 }
 
 function renderDuo() {
@@ -156,11 +134,6 @@ function renderDuo() {
     panel.find('.err__duo-reset--char').toggle(!!settings.duoCharAvatar);
     panel.find('.err__duo-reset--user').toggle(!!settings.duoUserAvatar);
     renderDuoChat();
-}
-
-function duoStartLoreFlow() {
-    if (duoLoreTimer) return;
-    duoLoreTimer = setInterval(() => { if (playing) renderDuoChat(); }, 16000);
 }
 
 // 头像上传：等比缩到 maxSize，转 dataURL 存进 settings
@@ -350,7 +323,6 @@ async function playIndex(i) {
         await audio.play();
         if (s.source === 'netease' && settings.neteaseApi) ncmLoadLyric(s.ncmId);
         renderDuoChat();
-        duoStartLoreFlow();
     } catch (e) {
         toastr.warning('播放失败：' + (s.title || s.url));
     }
@@ -395,13 +367,6 @@ function cycleLoopMode() {
     settings.loopMode = LOOP_MODES[(idx + 1) % LOOP_MODES.length].key;
     saveSettings();
     renderControls();
-}
-
-function setVolume(v) {
-    settings.volume = Math.max(0, Math.min(1, v));
-    audio.volume = settings.volume;
-    saveSettings();
-    $('#st-error .err__vol-input').val(Math.round(settings.volume * 100)).css('--seek', Math.round(settings.volume * 100) + '%');
 }
 
 // ---------------- 歌单操作 ----------------
@@ -987,10 +952,6 @@ function buildPanel() {
         <section class="err__page is-on" data-page="player">
           <div class="err__stage">
             <div class="err__duo">
-              <div class="err__duo-chat">
-                <div class="err__duo-bubble err__duo-bubble--char"><span class="err__duo-bubble-text">一起听…</span></div>
-                <div class="err__duo-bubble err__duo-bubble--user"><span class="err__duo-bubble-text">一起听…</span></div>
-              </div>
               <div class="err__duo-avatars">
                 <div class="err__duo-person err__duo-person--char">
                   <span class="err__duo-avatar" title="点击更换头像">
@@ -1015,12 +976,16 @@ function buildPanel() {
                   <span class="err__duo-name err__duo-name--user">你</span>
                 </div>
               </div>
-              <button type="button" class="err__duo-lore-btn" title="编辑氛围文案">${ICONS.gear} 氛围文案</button>
+            </div>
+            <div class="err__duo-chat">
+              <div class="err__duo-bubble err__duo-bubble--char" title="点击编辑 TA 说的话"><span class="err__duo-bubble-text">点我写 TA 说的话…</span></div>
+              <div class="err__duo-bubble err__duo-bubble--user" title="点击编辑你说的话"><span class="err__duo-bubble-text">点我写你说的话…</span></div>
             </div>
             <div class="err__now">
               <div class="err__now-title">未在播放</div>
               <div class="err__now-artist">添加歌曲开始播放</div>
             </div>
+            <div class="err__lrc"></div>
             <div class="err__progress">
               <span class="err__now-time">00:00</span>
               <input type="range" class="err__seek" min="0" max="0" step="0.1" value="0">
@@ -1031,10 +996,6 @@ function buildPanel() {
               <button type="button" class="err__ctrl err__prev" title="上一首">${ICONS.prev}</button>
               <button type="button" class="err__ctrl err__play-toggle" title="播放/暂停">${ICONS.play}</button>
               <button type="button" class="err__ctrl err__next" title="下一首">${ICONS.next}</button>
-              <div class="err__vol">
-                <span class="err__vol-icon">${ICONS.volume}</span>
-                <input type="range" class="err__vol-input" min="0" max="100" step="1" value="80">
-              </div>
             </div>
           </div>
         </section>
@@ -1110,17 +1071,16 @@ function buildPanel() {
         </div>
       </div>
 
-      <div class="err__lore-modal" style="display:none">
-        <div class="err__lore-box">
-          <div class="err__lore-head">
-            <span>氛围文案</span>
-            <button type="button" class="err__lore-close" title="关闭">${ICONS.close}</button>
+      <div class="err__chat-modal" style="display:none">
+        <div class="err__pl-box">
+          <div class="err__pl-head">
+            <span class="err__chat-title">编辑 TA 说的话</span>
+            <button type="button" class="err__chat-close" title="关闭">${ICONS.close}</button>
           </div>
-          <div class="err__lore-hint">一行一条，播放时会随机取用；留空则使用内置默认。</div>
-          <textarea class="err__lore-input" rows="12" spellcheck="false"></textarea>
-          <div class="err__lore-actions">
-            <button type="button" class="err__lore-reset">恢复默认</button>
-            <button type="button" class="err__lore-save">保存</button>
+          <textarea class="err__chat-input" rows="3" spellcheck="false" placeholder="说点什么…"></textarea>
+          <div class="err__pl-actions">
+            <button type="button" class="err__chat-cancel">取消</button>
+            <button type="button" class="err__chat-ok">保存</button>
           </div>
         </div>
       </div>
@@ -1367,30 +1327,26 @@ function bindPanelEvents() {
         duoResetAvatar($(this).hasClass('err__duo-reset--char') ? 'char' : 'user');
     });
 
-    // 一起听：氛围文案编辑
-    panel.find('.err__duo-lore-btn').on('click', function () {
-        panel.find('.err__lore-input').val(duoLoreLines().join('\n'));
-        panel.find('.err__lore-modal').show();
+    // 一起听：点气泡编辑 char/user 说的话
+    panel.find('.err__duo-bubble').on('click', function () {
+        chatEditTarget = $(this).hasClass('err__duo-bubble--char') ? 'char' : 'user';
+        panel.find('.err__chat-title').text(chatEditTarget === 'char' ? '编辑 TA 说的话' : '编辑你说的话');
+        panel.find('.err__chat-input').val(chatEditTarget === 'char' ? settings.duoCharLine : settings.duoUserLine);
+        panel.find('.err__chat-modal').show();
     });
-    panel.find('.err__lore-close').on('click', () => panel.find('.err__lore-modal').hide());
-    panel.find('.err__lore-modal').on('click', function (e) { if (e.target === this) $(this).hide(); });
-    panel.find('.err__lore-save').on('click', function () {
-        const lines = panel.find('.err__lore-input').val().split('\n').map(s => s.trim()).filter(Boolean);
-        settings.duoLore = lines.length ? lines : null;
+    panel.find('.err__chat-close, .err__chat-cancel').on('click', () => panel.find('.err__chat-modal').hide());
+    panel.find('.err__chat-modal').on('click', function (e) { if (e.target === this) $(this).hide(); });
+    panel.find('.err__chat-ok').on('click', function () {
+        const text = panel.find('.err__chat-input').val().trim();
+        if (chatEditTarget === 'char') settings.duoCharLine = text;
+        else settings.duoUserLine = text;
         saveSettings();
-        panel.find('.err__lore-modal').hide();
+        panel.find('.err__chat-modal').hide();
         renderDuoChat();
-        toastr.success('氛围文案已保存');
-    });
-    panel.find('.err__lore-reset').on('click', function () {
-        settings.duoLore = null;
-        saveSettings();
-        panel.find('.err__lore-input').val(DUO_DEFAULT_LORE.join('\n'));
-        renderDuoChat();
-        toastr.success('已恢复默认文案');
+        toastr.success('已保存');
     });
 
-    // 进度 / 音量
+    // 进度
     let seeking = false;
     panel.find('.err__seek').on('input', function () { seeking = true; const m = parseFloat(this.max) || 0; $(this).css('--seek', (m ? this.value / m * 100 : 0) + '%'); });
     panel.find('.err__seek').on('change', function () {
@@ -1398,7 +1354,6 @@ function bindPanelEvents() {
         if (isFinite(v) && audio.duration) { audio.currentTime = v; }
         seeking = false;
     });
-    panel.find('.err__vol-input').on('input', function () { $(this).css('--seek', this.value + '%'); setVolume(parseInt(this.value, 10) / 100); });
 
     // 点击进度条区域不冒泡到面板
     panel.find('.err__progress').on('click', (e) => e.stopPropagation());

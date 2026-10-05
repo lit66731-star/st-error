@@ -112,9 +112,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 20px;
-    padding: 28px 40px;
+    gap: 12px;
+    padding: 20px 24px 22px;
     box-sizing: border-box;
     overflow-y: auto;
 }
@@ -194,7 +193,7 @@
 .err__playlist-title { flex: 1; font-family: var(--err-serif); font-size: 19px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 歌词（歌单详情页顶部） */
-.err__lrc { flex: 0 0 auto; max-height: 40%; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 24px 16px; }
+.err__lrc { flex: 1; min-height: 0; width: 100%; max-width: 520px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 24px 12px; }
 .err__lrc-line { padding: 9px 4px; text-align: center; color: var(--err-text-3); transition: color 0.2s, transform 0.2s; }
 .err__lrc-text { font-size: 15px; line-height: 1.55; display: block; }
 .err__lrc-sub { font-size: 12px; color: var(--err-text-3); margin-top: 4px; display: block; }
@@ -297,7 +296,7 @@
 /* -------- 一起听：双头像 + 连接 + 氛围对话 -------- */
 .err__duo { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
 
-/* 消息流：头像上方，一上一下，小巧 */
+/* 消息流：头像下方，一上一下，可点编辑 */
 .err__duo-chat {
     display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
     width: 100%; max-width: 320px;
@@ -312,23 +311,27 @@
     box-shadow: 0 2px 7px rgba(163, 120, 110, 0.10);
     font-size: 12px; line-height: 1.5; color: var(--err-sky-deep);
     min-height: 18px;
+    cursor: pointer;
+    transition: filter 0.15s, transform 0.1s;
 }
+.err__duo-bubble:hover { filter: brightness(1.04); }
+.err__duo-bubble:active { transform: scale(0.98); }
 .err__duo-bubble--char { align-self: flex-start; border-bottom-left-radius: 4px; }
 .err__duo-bubble--user {
     align-self: flex-end; border-bottom-right-radius: 4px;
     background: var(--err-rose-bg); border-color: #F5C4CF; color: #E68098;
 }
-/* 尾巴指向各自头像 */
+/* 尾巴指向各自上方的头像 */
 .err__duo-bubble--char::after {
-    content: ''; position: absolute; left: 14px; bottom: -5px;
+    content: ''; position: absolute; left: 14px; top: -5px;
     width: 8px; height: 8px; background: var(--err-sky-bg);
-    border-right: 1px solid #CFDDEC; border-bottom: 1px solid #CFDDEC;
+    border-left: 1px solid #CFDDEC; border-top: 1px solid #CFDDEC;
     transform: rotate(45deg);
 }
 .err__duo-bubble--user::after {
-    content: ''; position: absolute; right: 14px; bottom: -5px;
+    content: ''; position: absolute; right: 14px; top: -5px;
     width: 8px; height: 8px; background: var(--err-rose-bg);
-    border-right: 1px solid #EBCFCA; border-bottom: 1px solid #EBCFCA;
+    border-left: 1px solid #EBCFCA; border-top: 1px solid #EBCFCA;
     transform: rotate(45deg);
 }
 .err__duo-bubble-text { display: block; }
@@ -339,10 +342,10 @@
 
 .err__duo-avatar {
     position: relative;
-    width: 84px; height: 84px; border-radius: 50%;
+    width: 64px; height: 64px; border-radius: 50%;
     background: var(--err-accent-bg);
     border: 2px solid #fff;
-    box-shadow: 0 0 0 1px var(--err-border-2), 0 8px 24px rgba(163, 120, 110, 0.16);
+    box-shadow: 0 0 0 1px var(--err-border-2), 0 6px 18px rgba(163, 120, 110, 0.16);
     display: flex; align-items: center; justify-content: center;
     flex: 0 0 auto;
     cursor: pointer;
@@ -354,7 +357,7 @@
 .err__duo-person--user .err__duo-avatar-fallback { color: var(--err-rose-deep); }
 .err__duo-avatar:hover { filter: brightness(1.03); }
 .err__duo-avatar-fallback { display: flex; }
-.err__duo-avatar-fallback svg { width: 38px; height: 38px; }
+.err__duo-avatar-fallback svg { width: 30px; height: 30px; }
 .err__duo-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .err__duo-reset {
     position: absolute; top: -2px; right: -2px; z-index: 2;
@@ -373,7 +376,7 @@
 }
 
 /* 中间连接：动态心电图（取代漂浮音符/爱心，去掉拥挤感） */
-.err__duo-link { position: relative; width: 96px; height: 44px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
+.err__duo-link { position: relative; width: 72px; height: 40px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
 .err__ecg { width: 100%; height: 100%; overflow: visible; }
 .err__ecg path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .err__ecg-base { stroke: var(--err-rose); stroke-width: 2; opacity: 0.35; }
@@ -392,52 +395,26 @@
     50%      { box-shadow: 0 0 0 5px rgba(240, 154, 163, 0.30), 0 8px 26px rgba(232, 116, 135, 0.22); }
 }
 
-/* 氛围文案编辑按钮 */
-.err__duo-lore-btn {
-    border: 1px solid var(--err-border-2); background: transparent; color: var(--err-text-3);
-    border-radius: 999px; padding: 3px 11px; font-size: 11px; cursor: pointer;
-    display: inline-flex; align-items: center; gap: 5px;
-    transition: color 0.15s, background 0.15s;
-}
-.err__duo-lore-btn:hover { color: var(--err-text); background: var(--err-surface-2); }
-.err__duo-lore-btn svg { width: 12px; height: 12px; }
-
-/* 氛围文案编辑弹窗 */
-.err__lore-modal {
+/* 对话流编辑弹窗 */
+.err__chat-modal {
     position: absolute; inset: 0; z-index: 11;
     background: rgba(90, 70, 62, 0.4);
     display: flex; align-items: center; justify-content: center;
-    backdrop-filter: blur(2px);
+    padding: 24px;
 }
-.err__lore-box {
-    width: 360px; max-width: calc(100vw - 40px);
-    background: var(--err-surface); border-radius: 14px; padding: 18px;
-    box-shadow: 0 20px 50px rgba(163, 120, 110, 0.25);
-    display: flex; flex-direction: column; gap: 10px;
-}
-.err__lore-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 500; }
-.err__lore-close {
+.err__chat-close {
     width: 26px; height: 26px; border: none; background: transparent; color: var(--err-text-3);
-    border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
-.err__lore-close:hover { background: var(--err-surface-2); color: var(--err-text); }
-.err__lore-close svg { width: 14px; height: 14px; }
-.err__lore-hint { font-size: 11px; color: var(--err-text-3); }
-.err__lore-input {
-    width: 100%; min-height: 180px; resize: vertical; box-sizing: border-box;
-    padding: 10px; font-size: 12px; line-height: 1.6;
-    border: 1px solid var(--err-border-2); border-radius: 8px; background: var(--err-bg);
+.err__chat-close:hover { background: var(--err-surface-2); color: var(--err-text); }
+.err__chat-close svg { width: 14px; height: 14px; }
+.err__chat-input {
+    width: 100%; min-height: 72px; resize: vertical; box-sizing: border-box;
+    padding: 10px; font-size: 13px; line-height: 1.6;
+    border: 1px solid var(--err-border-2); border-radius: 12px; background: var(--err-bg);
     color: var(--err-text); font-family: inherit;
 }
-.err__lore-input:focus { outline: none; border-color: var(--err-sky); }
-.err__lore-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.err__lore-reset, .err__lore-save {
-    border: 1px solid var(--err-border-2); background: transparent; color: var(--err-text-2);
-    border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer;
-}
-.err__lore-reset:hover { background: var(--err-surface-2); color: var(--err-text); }
-.err__lore-save { background: var(--err-rose); color: #fff; border-color: var(--err-rose); }
-.err__lore-save:hover { background: var(--err-rose-deep); color: #fff; }
+.err__chat-input:focus { outline: none; border-color: var(--err-rose); }
 
 /* 当前曲目 */
 .err__now { text-align: center; max-width: 100%; padding: 0 8px; }
@@ -495,12 +472,6 @@
 .err__loop { color: var(--err-lilac-deep); }
 .err__prev, .err__next { color: var(--err-sky-deep); }
 .err__loop svg, .err__prev svg, .err__next svg { width: 20px; height: 20px; }
-
-/* 音量 */
-.err__vol { display: flex; align-items: center; gap: 8px; margin-left: 6px; }
-.err__vol-icon { color: var(--err-sage-deep); display: flex; }
-.err__vol-icon svg { width: 18px; height: 18px; }
-.err__vol-input { width: 90px; }
 
 /* -------- 分组标题 -------- */
 .err__label {
@@ -719,10 +690,9 @@
 .err__qr-img { width: 180px; height: 180px; border-radius: 8px; background: #fff; }
 .err__qr-status { font-size: 12px; color: var(--err-text-2); text-align: center; }
 
-/* ============ 滑块（进度 / 音量） ============ */
+/* ============ 滑块（进度） ============ */
 .err__seek { flex: 1; min-width: 0; }
-input[type="range"].err__seek,
-input[type="range"].err__vol-input {
+input[type="range"].err__seek {
     -webkit-appearance: none;
     appearance: none;
     height: 3px;
@@ -731,9 +701,7 @@ input[type="range"].err__vol-input {
     outline: none;
     cursor: pointer;
 }
-input[type="range"].err__vol-input { --err-fill: var(--err-sage); --err-fill-2: var(--err-sage); }
-input[type="range"].err__seek::-webkit-slider-thumb,
-input[type="range"].err__vol-input::-webkit-slider-thumb {
+input[type="range"].err__seek::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
     width: 12px; height: 12px;
@@ -743,8 +711,7 @@ input[type="range"].err__vol-input::-webkit-slider-thumb {
     box-sizing: border-box;
     cursor: pointer;
 }
-input[type="range"].err__seek::-moz-range-thumb,
-input[type="range"].err__vol-input::-moz-range-thumb {
+input[type="range"].err__seek::-moz-range-thumb {
     width: 12px; height: 12px;
     border-radius: 50%;
     background: #fff;
@@ -773,15 +740,14 @@ input[type="range"].err__vol-input::-moz-range-thumb {
     body.st-error-open { touch-action: auto !important; }
 
     .err__head { padding: 18px 20px 14px; }
-    .err__stage { padding: 20px 20px 22px; gap: 14px; }
-    .err__duo-avatar { width: 84px; height: 84px; }
-    .err__duo-avatar-fallback svg { width: 38px; height: 38px; }
-    .err__duo-link { width: 60px; height: 40px; }
+    .err__stage { padding: 16px 16px 18px; gap: 10px; }
+    .err__duo-avatar { width: 56px; height: 56px; }
+    .err__duo-avatar-fallback svg { width: 28px; height: 28px; }
+    .err__duo-link { width: 52px; height: 36px; }
     .err__now-title { font-size: 17px; }
     .err__controls { gap: 12px; }
     .err__play-toggle { width: 46px; height: 46px; }
-    .err__vol-input { width: 64px; }
-    .err__lrc { padding: 6px 16px 12px; }
+    .err__lrc { padding: 4px 16px 10px; }
     .err__home-hero { padding: 26px 18px 16px; }
     .err__home-avatar { width: 84px; height: 84px; }
     .err__home-name { font-size: 20px; }
