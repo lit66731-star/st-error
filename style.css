@@ -88,37 +88,99 @@
 .err__version { font-size: 11px; letter-spacing: 0.4px; color: var(--err-text-3); }
 .err__close {
     width: 30px; height: 30px; border: none; background: transparent;
-    color: var(--err-text-3); border-radius: 6px; cursor: pointer;
+    color: var(--err-text-3); border-radius: 12px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: background 0.15s, color 0.15s; flex: 0 0 auto;
 }
 .err__close:hover { background: var(--err-surface-2); color: var(--err-text); }
 .err__close svg { width: 16px; height: 16px; }
 
-/* ============ 主体两栏 ============ */
+/* ============ 主体（三页容器） ============ */
 .err__body {
     flex: 1;
     min-height: 0;
-    display: flex;
-    flex-direction: row;
+    position: relative;
+    overflow: hidden;
 }
+.err__page {
+    position: absolute;
+    inset: 0;
+    display: none;
+}
+.err__page.is-on { display: flex; flex-direction: column; }
 
-/* -------- 左：唱盘 + 信息 + 控制 -------- */
+/* -------- 播放器页：一起听 + 控制（占满） -------- */
 .err__stage {
-    flex: 0 0 46%;
-    min-width: 0;
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 20px;
-    padding: 32px 40px;
-    border-right: 1px solid var(--err-border);
+    padding: 28px 40px;
     box-sizing: border-box;
-    background:
-        radial-gradient(ellipse at 15% 8%, var(--err-sky-bg) 0%, transparent 55%),
-        radial-gradient(ellipse at 88% 92%, var(--err-rose-bg) 0%, transparent 55%);
+    overflow-y: auto;
 }
+
+/* -------- 主页页：歌词 -------- */
+.err__home-now { text-align: center; padding: 30px 24px 6px; }
+.err__home-title {
+    font-family: var(--err-serif);
+    font-size: 24px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.err__home-artist { font-size: 13px; color: var(--err-lilac-deep); margin-top: 4px; }
+.err__lrc { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 20px 28px 44px; }
+.err__lrc-line { padding: 11px 4px; text-align: center; color: var(--err-text-3); transition: color 0.2s, transform 0.2s; }
+.err__lrc-text { font-size: 16px; line-height: 1.5; display: block; }
+.err__lrc-sub { font-size: 12px; color: var(--err-text-3); margin-top: 4px; display: block; }
+.err__lrc-line.is-cur .err__lrc-text { color: var(--err-rose-deep); font-weight: 600; }
+.err__lrc-line.is-cur { transform: scale(1.03); }
+.err__lrc-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 0 24px; }
+.err__lrc-empty-t { font-size: 15px; color: var(--err-text-2); }
+.err__lrc-empty-s { font-size: 12px; color: var(--err-text-3); }
+
+/* -------- 设置页：接音乐 APP -------- */
+.err__set { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 22px 26px 40px; }
+.err__set > * { max-width: 620px; margin-left: auto; margin-right: auto; }
+.err__set-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+.err__set-head--add, .err__set-head--list { margin-top: 22px; }
+.err__set-hint { font-size: 12px; color: var(--err-text-3); }
+
+/* -------- 底部 Dock -------- */
+.err__dock {
+    flex: 0 0 auto;
+    display: flex;
+    border-top: 1px solid var(--err-border);
+    background: var(--err-surface);
+    padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
+    box-shadow: 0 -6px 20px rgba(163, 120, 110, 0.06);
+}
+.err__dock-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 8px 0;
+    background: none;
+    border: none;
+    color: var(--err-text-3);
+    cursor: pointer;
+    border-radius: 14px;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    transition: color 0.15s, background 0.15s;
+}
+.err__dock-btn svg { width: 22px; height: 22px; }
+.err__dock-btn:hover { color: var(--err-text-2); background: var(--err-surface-2); }
+.err__dock-btn.is-on { color: var(--err-rose-deep); }
+.err__dock-btn.is-on svg { filter: drop-shadow(0 3px 6px rgba(240, 127, 150, 0.35)); }
 
 /* -------- 一起听：双头像 + 连接 + 氛围对话 -------- */
 .err__duo { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
@@ -307,7 +369,7 @@
     transition: color 0.15s, background 0.15s;
 }
 .err__ctrl svg { width: 22px; height: 22px; display: block; }
-.err__ctrl:hover { color: var(--err-text); background: var(--err-surface-2); }
+.err__ctrl:hover { color: var(--err-rose-deep); background: var(--err-rose-bg); }
 .err__play-toggle {
     width: 52px;
     height: 52px;
@@ -328,21 +390,7 @@
 .err__vol-icon svg { width: 18px; height: 18px; }
 .err__vol-input { width: 90px; }
 
-/* -------- 右：播放列表 -------- */
-.err__side {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    padding: 24px 28px 20px;
-    box-sizing: border-box;
-}
-.err__side-head {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin-bottom: 14px;
-}
+/* -------- 分组标题 -------- */
 .err__label {
     font-family: var(--err-serif);
     font-size: 16px;
@@ -360,7 +408,7 @@
     background: var(--err-surface);
     color: var(--err-text);
     font: inherit;
-    border-radius: 6px;
+    border-radius: 12px;
     box-sizing: border-box;
 }
 .err__url-input::placeholder { color: var(--err-text-3); }
@@ -371,7 +419,7 @@
     border: 1px solid var(--err-border-2);
     background: transparent;
     color: var(--err-text-2);
-    border-radius: 6px;
+    border-radius: 12px;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -419,7 +467,7 @@
     width: 26px; height: 26px;
     border: none; background: transparent;
     color: var(--err-text-3);
-    border-radius: 6px; cursor: pointer;
+    border-radius: 10px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     opacity: 0;
     transition: opacity 0.12s, color 0.12s, background 0.12s;
@@ -465,14 +513,14 @@
 .err__ncm-input {
     flex: 1; min-width: 0; height: 34px; padding: 0 12px;
     border: 1px solid var(--err-border-2); background: var(--err-surface);
-    color: var(--err-text); font: inherit; border-radius: 6px; box-sizing: border-box;
+    color: var(--err-text); font: inherit; border-radius: 12px; box-sizing: border-box;
 }
 .err__ncm-input::placeholder { color: var(--err-text-3); }
 .err__ncm-input:focus { outline: none; border-color: var(--err-sky); }
 .err__ncm-search, .err__ncm-login, .err__ncm-gear, .err__ncm-save {
     width: 34px; height: 34px; flex: 0 0 auto;
     border: 1px solid var(--err-border-2); background: transparent; color: var(--err-text-2);
-    border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    border-radius: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .err__ncm-search { background: var(--err-sky); color: #fff; border-color: var(--err-sky); }
@@ -485,7 +533,7 @@
 .err__ncm-api, .err__ncm-cookie {
     width: 100%; height: 30px; padding: 0 10px; font-size: 12px;
     border: 1px solid var(--err-border-2); background: var(--err-surface); color: var(--err-text);
-    border-radius: 6px; font: inherit; box-sizing: border-box;
+    border-radius: 12px; font: inherit; box-sizing: border-box;
 }
 .err__ncm-api::placeholder, .err__ncm-cookie::placeholder { color: var(--err-text-3); }
 .err__ncm-api:focus, .err__ncm-cookie:focus { outline: none; border-color: var(--err-sky); }
@@ -533,7 +581,7 @@
 .err__qr-head { width: 100%; display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 500; }
 .err__qr-close {
     width: 26px; height: 26px; border: none; background: transparent; color: var(--err-text-3);
-    border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 .err__qr-close:hover { background: var(--err-surface-2); color: var(--err-text); }
 .err__qr-close svg { width: 14px; height: 14px; }
@@ -594,14 +642,7 @@ input[type="range"].err__vol-input::-moz-range-thumb {
     body.st-error-open { touch-action: auto !important; }
 
     .err__head { padding: 18px 20px 14px; }
-    .err__body { flex-direction: column; }
-    .err__stage {
-        flex: 0 0 auto;
-        border-right: none;
-        border-bottom: 1px solid var(--err-border);
-        padding: 20px 20px 22px;
-        gap: 14px;
-    }
+    .err__stage { padding: 20px 20px 22px; gap: 14px; }
     .err__duo-avatar { width: 84px; height: 84px; }
     .err__duo-avatar-fallback svg { width: 38px; height: 38px; }
     .err__duo-link { width: 60px; height: 40px; }
@@ -609,7 +650,9 @@ input[type="range"].err__vol-input::-moz-range-thumb {
     .err__controls { gap: 12px; }
     .err__play-toggle { width: 46px; height: 46px; }
     .err__vol-input { width: 64px; }
-
-    .err__side { flex: 1; min-height: 0; padding: 18px 20px 20px; }
+    .err__lrc { padding: 16px 18px 44px; }
+    .err__lrc-text { font-size: 15px; }
+    .err__home-title { font-size: 21px; }
+    .err__set { padding: 16px 18px 40px; }
     .err__row-del { opacity: 1; }
 }

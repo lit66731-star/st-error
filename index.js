@@ -1,12 +1,12 @@
 /* ==========================================================================
    Error · 音乐播放器（SillyTavern 第三方扩展）
-   界面仿网易云音乐，奶白底 + 马卡龙多色分工；双头像之间用动态心电图相连。
+   界面仿网易云音乐；底部 Dock 三页（主页=歌词 / 播放器=一起听 / 设置=接音乐 APP），奶白底。
    歌源：本地文件（存 IndexedDB）+ 直链 URL + 网易云（需自建 NeteaseCloudMusicApi）；
    播放内核用 HTML5 Audio。
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.4.1'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.4.2'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -25,6 +25,8 @@ const ICONS = {
     link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1.5 1.5"/><path d="M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1.5-1.5"/></svg>',
     plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
     search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+    home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>',
+    player: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a8 8 0 0 1 16 0"/><rect x="3" y="14" width="4" height="7" rx="2"/><rect x="17" y="14" width="4" height="7" rx="2"/></svg>',
     gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     qr: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM19 14h2v3h-2zM14 19h3v2h-3zM19 19h2v2h-2z"/></svg>',
     cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .7-7.94A5.5 5.5 0 0 0 7.1 8.5 4.5 4.5 0 0 0 7 18z"/></svg>',
@@ -55,6 +57,7 @@ const ncm = {
     results: [],        // 搜索结果缓存
     lyricLines: [],     // 当前歌词 [{time, text}]
     lyricTrans: [],     // 翻译 [{time, text}]
+    lyricCur: -1,       // 当前高亮歌词行，避免重复滚动
     qrKey: '',
     qrTimer: null,
 };
@@ -580,29 +583,40 @@ async function ncmLoadLyric(songId) {
 }
 
 function renderLyric() {
-    const panel = $('#st-error');
-    if (!panel.length) return;
-    const wrap = panel.find('.err__lyric');
-    const has = ncm.lyricLines.length > 0;
-    wrap.toggle(has);
-    if (!has) { panel.find('.err__lyric-line').text(''); panel.find('.err__lyric-trans').text(''); return; }
+    const el = $('#st-error .err__lrc');
+    if (!el.length) return;
+    ncm.lyricCur = -1;
+    el.empty();
+    if (!ncm.lyricLines.length) {
+        el.html('<div class="err__lrc-empty"><span class="err__lrc-empty-t">暂无歌词</span><span class="err__lrc-empty-s">在「设置」接入网易云并播放有歌词的歌，即可在这里看歌词</span></div>');
+        return;
+    }
+    const trans = ncm.lyricTrans || [];
+    ncm.lyricLines.forEach((ln, i) => {
+        let t = '';
+        for (const tr of trans) { if (tr.time <= ln.time) t = tr.text; else break; }
+        el.append(`<div class="err__lrc-line" data-i="${i}"><span class="err__lrc-text">${escapeHtml(ln.text || '…')}</span>${t ? `<span class="err__lrc-sub">${escapeHtml(t)}</span>` : ''}</div>`);
+    });
     updateLyricTime(audio.currentTime || 0);
 }
 
 function updateLyricTime(t) {
-    const panel = $('#st-error');
-    if (!panel.length || !ncm.lyricLines.length) return;
+    const el = $('#st-error .err__lrc');
+    if (!el.length || !ncm.lyricLines.length) return;
     let idx = -1;
     for (let i = 0; i < ncm.lyricLines.length; i++) {
         if (ncm.lyricLines[i].time <= t) idx = i; else break;
     }
     if (idx < 0) idx = 0;
-    panel.find('.err__lyric-line').text(ncm.lyricLines[idx].text || '…');
-    let trans = '';
-    for (const tr of ncm.lyricTrans) {
-        if (tr.time <= t) trans = tr.text; else break;
-    }
-    panel.find('.err__lyric-trans').text(trans);
+    if (idx === ncm.lyricCur) return;
+    ncm.lyricCur = idx;
+    el.find('.err__lrc-line').removeClass('is-cur');
+    const cur = el.find(`.err__lrc-line[data-i="${idx}"]`);
+    if (!cur.length) return;
+    cur.addClass('is-cur');
+    const box = el.get(0);
+    const target = cur.get(0).offsetTop - box.clientHeight / 2 + cur.get(0).offsetHeight / 2;
+    box.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
 }
 
 // —— 扫码登录 ——
@@ -698,11 +712,15 @@ function renderNow() {
     if (s) {
         titleEl.text(s.title);
         artistEl.text(s.artist || '未知艺术家');
+        panel.find('.err__home-title').text(s.title);
+        panel.find('.err__home-artist').text(s.artist || '未知艺术家');
         panel.find('.err__now-time').text(fmtDur(audio.currentTime || 0));
         panel.find('.err__now-dur').text(fmtDur(s.duration));
     } else {
         titleEl.text('未在播放');
         artistEl.text('添加歌曲开始播放');
+        panel.find('.err__home-title').text('未在播放');
+        panel.find('.err__home-artist').text('添加歌曲开始播放');
         panel.find('.err__now-time').text('00:00');
         panel.find('.err__now-dur').text('--:--');
     }
@@ -743,6 +761,7 @@ function renderList() {
 function renderAll() {
     renderList();
     renderNow();
+    renderLyric();
     renderControls();
     renderDuo();
     const panel = $('#st-error');
@@ -750,10 +769,16 @@ function renderAll() {
 }
 
 // ---------------- 面板 ----------------
+function switchPage(name) {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    panel.find('.err__page').removeClass('is-on').filter(`[data-page="${name}"]`).addClass('is-on');
+    panel.find('.err__dock-btn').removeClass('is-on').filter(`[data-page="${name}"]`).addClass('is-on');
+}
+
 function buildPanel() {
     if ($('#st-error').length) return;
-    const html = `
-    <div id="st-error" class="err" style="display:none">
+    const html = `    <div id="st-error" class="err" style="display:none">
       <div class="err__head">
         <div class="err__brand">
           <span class="err__title">Error</span>
@@ -763,90 +788,114 @@ function buildPanel() {
       </div>
 
       <div class="err__body">
-        <div class="err__stage">
-          <div class="err__duo">
-            <div class="err__duo-chat">
-              <div class="err__duo-bubble err__duo-bubble--char"><span class="err__duo-bubble-text">一起听…</span></div>
-              <div class="err__duo-bubble err__duo-bubble--user"><span class="err__duo-bubble-text">一起听…</span></div>
-            </div>
-            <div class="err__duo-avatars">
-              <div class="err__duo-person err__duo-person--char">
-                <span class="err__duo-avatar" title="点击更换头像">
-                  <span class="err__duo-avatar-fallback">${ICONS.user}</span>
-                  <img class="err__duo-img err__duo-img--char" alt="" style="display:none">
-                  <button type="button" class="err__duo-reset err__duo-reset--char" title="恢复默认头像" style="display:none">${ICONS.close}</button>
-                </span>
-                <span class="err__duo-name err__duo-name--char"></span>
-              </div>
-              <div class="err__duo-link" aria-hidden="true">
-                <svg class="err__ecg" viewBox="0 0 96 44" preserveAspectRatio="none">
-                  <path class="err__ecg-base" d="M0 22 H6 L8 17 L10 22 H13 L15 26 L18 4 L21 26 L23 22 H26 L28 16 L30 22 H32 H38 L40 17 L42 22 H45 L47 26 L50 4 L53 26 L55 22 H58 L60 16 L62 22 H64 H70 L72 17 L74 22 H77 L79 26 L82 4 L85 26 L87 22 H90 L92 16 L94 22 H96"/>
-                  <path class="err__ecg-pulse" d="M0 22 H6 L8 17 L10 22 H13 L15 26 L18 4 L21 26 L23 22 H26 L28 16 L30 22 H32 H38 L40 17 L42 22 H45 L47 26 L50 4 L53 26 L55 22 H58 L60 16 L62 22 H64 H70 L72 17 L74 22 H77 L79 26 L82 4 L85 26 L87 22 H90 L92 16 L94 22 H96"/>
-                </svg>
-              </div>
-              <div class="err__duo-person err__duo-person--user">
-                <span class="err__duo-avatar" title="点击更换头像">
-                  <span class="err__duo-avatar-fallback">${ICONS.user}</span>
-                  <img class="err__duo-img err__duo-img--user" alt="" style="display:none">
-                  <button type="button" class="err__duo-reset err__duo-reset--user" title="恢复默认头像" style="display:none">${ICONS.close}</button>
-                </span>
-                <span class="err__duo-name err__duo-name--user">你</span>
-              </div>
-            </div>
-            <button type="button" class="err__duo-lore-btn" title="编辑氛围文案">${ICONS.gear} 氛围文案</button>
+        <!-- 主页：歌词 -->
+        <section class="err__page" data-page="home">
+          <div class="err__home-now">
+            <div class="err__home-title">未在播放</div>
+            <div class="err__home-artist">添加歌曲开始播放</div>
           </div>
-          <div class="err__now">
-            <div class="err__now-title">未在播放</div>
-            <div class="err__now-artist">添加歌曲开始播放</div>
-          </div>
-          <div class="err__lyric" style="display:none">
-            <div class="err__lyric-line"></div>
-            <div class="err__lyric-trans"></div>
-          </div>
-          <div class="err__progress">
-            <span class="err__now-time">00:00</span>
-            <input type="range" class="err__seek" min="0" max="0" step="0.1" value="0">
-            <span class="err__now-dur">--:--</span>
-          </div>
-          <div class="err__controls">
-            <button type="button" class="err__ctrl err__loop" title="列表循环">${ICONS.loopList}</button>
-            <button type="button" class="err__ctrl err__prev" title="上一首">${ICONS.prev}</button>
-            <button type="button" class="err__ctrl err__play-toggle" title="播放/暂停">${ICONS.play}</button>
-            <button type="button" class="err__ctrl err__next" title="下一首">${ICONS.next}</button>
-            <div class="err__vol">
-              <span class="err__vol-icon">${ICONS.volume}</span>
-              <input type="range" class="err__vol-input" min="0" max="100" step="1" value="80">
-            </div>
-          </div>
-        </div>
+          <div class="err__lrc"></div>
+        </section>
 
-        <div class="err__side">
-          <div class="err__side-head">
-            <span class="err__label">播放列表</span>
-            <span class="err__count">0 首</span>
-          </div>
-          <div class="err__ncm">
-            <div class="err__ncm-bar">
-              <input type="text" class="err__ncm-input" placeholder="搜索网易云歌曲">
-              <button type="button" class="err__ncm-search" title="搜索">${ICONS.search}</button>
-              <button type="button" class="err__ncm-login" title="扫码登录网易云">${ICONS.qr}</button>
-              <button type="button" class="err__ncm-gear" title="API 设置">${ICONS.gear}</button>
+        <!-- 播放器：一起听 -->
+        <section class="err__page is-on" data-page="player">
+          <div class="err__stage">
+            <div class="err__duo">
+              <div class="err__duo-chat">
+                <div class="err__duo-bubble err__duo-bubble--char"><span class="err__duo-bubble-text">一起听…</span></div>
+                <div class="err__duo-bubble err__duo-bubble--user"><span class="err__duo-bubble-text">一起听…</span></div>
+              </div>
+              <div class="err__duo-avatars">
+                <div class="err__duo-person err__duo-person--char">
+                  <span class="err__duo-avatar" title="点击更换头像">
+                    <span class="err__duo-avatar-fallback">${ICONS.user}</span>
+                    <img class="err__duo-img err__duo-img--char" alt="" style="display:none">
+                    <button type="button" class="err__duo-reset err__duo-reset--char" title="恢复默认头像" style="display:none">${ICONS.close}</button>
+                  </span>
+                  <span class="err__duo-name err__duo-name--char"></span>
+                </div>
+                <div class="err__duo-link" aria-hidden="true">
+                  <svg class="err__ecg" viewBox="0 0 96 44" preserveAspectRatio="none">
+                    <path class="err__ecg-base" d="M0 22 H6 L8 17 L10 22 H13 L15 26 L18 4 L21 26 L23 22 H26 L28 16 L30 22 H32 H38 L40 17 L42 22 H45 L47 26 L50 4 L53 26 L55 22 H58 L60 16 L62 22 H64 H70 L72 17 L74 22 H77 L79 26 L82 4 L85 26 L87 22 H90 L92 16 L94 22 H96"/>
+                    <path class="err__ecg-pulse" d="M0 22 H6 L8 17 L10 22 H13 L15 26 L18 4 L21 26 L23 22 H26 L28 16 L30 22 H32 H38 L40 17 L42 22 H45 L47 26 L50 4 L53 26 L55 22 H58 L60 16 L62 22 H64 H70 L72 17 L74 22 H77 L79 26 L82 4 L85 26 L87 22 H90 L92 16 L94 22 H96"/>
+                  </svg>
+                </div>
+                <div class="err__duo-person err__duo-person--user">
+                  <span class="err__duo-avatar" title="点击更换头像">
+                    <span class="err__duo-avatar-fallback">${ICONS.user}</span>
+                    <img class="err__duo-img err__duo-img--user" alt="" style="display:none">
+                    <button type="button" class="err__duo-reset err__duo-reset--user" title="恢复默认头像" style="display:none">${ICONS.close}</button>
+                  </span>
+                  <span class="err__duo-name err__duo-name--user">你</span>
+                </div>
+              </div>
+              <button type="button" class="err__duo-lore-btn" title="编辑氛围文案">${ICONS.gear} 氛围文案</button>
             </div>
-            <div class="err__ncm-settings" style="display:none">
-              <input type="text" class="err__ncm-api" placeholder="网易云 API 地址，如 http://127.0.0.1:3000">
-              <input type="text" class="err__ncm-cookie" placeholder="MUSIC_U cookie（可选，绕开机房 IP 风控）">
-              <button type="button" class="err__ncm-save">保存</button>
+            <div class="err__now">
+              <div class="err__now-title">未在播放</div>
+              <div class="err__now-artist">添加歌曲开始播放</div>
             </div>
-            <div class="err__ncm-results"></div>
+            <div class="err__progress">
+              <span class="err__now-time">00:00</span>
+              <input type="range" class="err__seek" min="0" max="0" step="0.1" value="0">
+              <span class="err__now-dur">--:--</span>
+            </div>
+            <div class="err__controls">
+              <button type="button" class="err__ctrl err__loop" title="列表循环">${ICONS.loopList}</button>
+              <button type="button" class="err__ctrl err__prev" title="上一首">${ICONS.prev}</button>
+              <button type="button" class="err__ctrl err__play-toggle" title="播放/暂停">${ICONS.play}</button>
+              <button type="button" class="err__ctrl err__next" title="下一首">${ICONS.next}</button>
+              <div class="err__vol">
+                <span class="err__vol-icon">${ICONS.volume}</span>
+                <input type="range" class="err__vol-input" min="0" max="100" step="1" value="80">
+              </div>
+            </div>
           </div>
-          <div class="err__add-row">
-            <input type="text" class="err__url-input" placeholder="粘贴网易云歌曲链接/ID，或音频直链">
-            <button type="button" class="err__add-url" title="添加直链">${ICONS.plus}</button>
-            <button type="button" class="err__add-local" title="添加本地文件">${ICONS.folder}</button>
+        </section>
+
+        <!-- 设置：接音乐 APP -->
+        <section class="err__page" data-page="settings">
+          <div class="err__set">
+            <div class="err__set-head">
+              <span class="err__label">接音乐 APP</span>
+              <span class="err__set-hint">搜索 / 扫码登录 / API</span>
+            </div>
+            <div class="err__ncm">
+              <div class="err__ncm-bar">
+                <input type="text" class="err__ncm-input" placeholder="搜索网易云歌曲">
+                <button type="button" class="err__ncm-search" title="搜索">${ICONS.search}</button>
+                <button type="button" class="err__ncm-login" title="扫码登录网易云">${ICONS.qr}</button>
+                <button type="button" class="err__ncm-gear" title="API 设置">${ICONS.gear}</button>
+              </div>
+              <div class="err__ncm-settings" style="display:none">
+                <input type="text" class="err__ncm-api" placeholder="网易云 API 地址，如 http://127.0.0.1:3000">
+                <input type="text" class="err__ncm-cookie" placeholder="MUSIC_U cookie（可选，绕开机房 IP 风控）">
+                <button type="button" class="err__ncm-save">保存</button>
+              </div>
+              <div class="err__ncm-results"></div>
+            </div>
+            <div class="err__set-head err__set-head--add">
+              <span class="err__label">添加歌曲</span>
+            </div>
+            <div class="err__add-row">
+              <input type="text" class="err__url-input" placeholder="粘贴网易云歌曲链接/ID，或音频直链">
+              <button type="button" class="err__add-url" title="添加直链">${ICONS.plus}</button>
+              <button type="button" class="err__add-local" title="添加本地文件">${ICONS.folder}</button>
+            </div>
+            <input type="file" class="err__file-input" accept="audio/*" multiple hidden>
+            <div class="err__set-head err__set-head--list">
+              <span class="err__label">歌单</span>
+              <span class="err__count">0 首</span>
+            </div>
+            <div class="err__list"></div>
           </div>
-          <input type="file" class="err__file-input" accept="audio/*" multiple hidden>
-          <div class="err__list"></div>
-        </div>
+        </section>
+      </div>
+
+      <div class="err__dock">
+        <button type="button" class="err__dock-btn" data-page="home" title="主页">${ICONS.home}<span>主页</span></button>
+        <button type="button" class="err__dock-btn is-on" data-page="player" title="播放器">${ICONS.player}<span>播放器</span></button>
+        <button type="button" class="err__dock-btn" data-page="settings" title="设置">${ICONS.gear}<span>设置</span></button>
       </div>
 
       <div class="err__qr-modal" style="display:none">
@@ -884,6 +933,9 @@ function bindPanelEvents() {
 
     panel.find('.err__ncm-api').val(settings.neteaseApi || '');
     syncNcmLoginUi();
+
+    // 底部 Dock 三页切换
+    panel.find('.err__dock-btn').on('click', function () { switchPage($(this).data('page')); });
 
     panel.find('.err__close').on('click', () => togglePanel(false));
     panel.find('.err__play-toggle').on('click', togglePlay);
