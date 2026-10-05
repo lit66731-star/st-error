@@ -1,12 +1,12 @@
 /* ==========================================================================
    Error · 音乐播放器（SillyTavern 第三方扩展）
-   界面：统一浅粉单色 · 可爱少女风；底部 Dock 三页（主页=歌词 / 播放器=一起听 / 设置=接音乐 APP）。
+   界面：统一浅粉单色 · 可爱少女风；底部 Dock 三页（主页=个人主页+歌单 / 播放器=一起听 / 设置=接音乐 APP）。
    歌源：本地文件（存 IndexedDB）+ 直链 URL + 网易云（需自建 NeteaseCloudMusicApi）；
    播放内核用 HTML5 Audio。
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.4.5'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.5.0'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -31,6 +31,8 @@ const ICONS = {
     qr: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM19 14h2v3h-2zM14 19h3v2h-3zM19 19h2v2h-2z"/></svg>',
     cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .7-7.94A5.5 5.5 0 0 0 7.1 8.5 4.5 4.5 0 0 0 7 18z"/></svg>',
     user: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.6 3.6-6 8-6s8 2.4 8 6v1H4z"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+    list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
 };
 
 // ---------------- 状态 ----------------
@@ -42,6 +44,8 @@ const LOOP_MODES = [
 
 let settings = {
     songs: [],          // { id, title, artist, source: 'url'|'local'|'netease', url?, fileId?, ncmId?, cover?, duration? }
+    playlists: [],      // 歌单 [{ id, name, songIds: [songId...] }]
+    profile: { follows: 0, fans: 0, level: 0, listenSeconds: 0 }, // 个人主页资料（关注/粉丝/等级/听歌时长）
     currentIndex: -1,
     loopMode: 'list',
     volume: 0.8,
@@ -75,6 +79,7 @@ const DUO_DEFAULT_LORE = [
 
 let duoPersonas = null;   // 延迟加载 personas.js 拿 user_avatar
 let duoLoreTimer = null;  // 播放时轮换氛围文案
+let activePlaylistId = null; // 当前浏览的歌单（歌单详情页），null=个人主页视图
 
 function duoContext() {
     try {
@@ -221,6 +226,8 @@ function loadSettings() {
             if (!Array.isArray(settings.songs)) settings.songs = [];
         }
     } catch (e) { settings.songs = []; }
+    if (!settings.profile) settings.profile = { follows: 0, fans: 0, level: 0, listenSeconds: 0 };
+    ensurePlaylists();
 }
 
 // ---------------- IndexedDB（本地音频文件持久化） ----------------
@@ -397,6 +404,31 @@ function setVolume(v) {
 }
 
 // ---------------- 歌单操作 ----------------
+function ensurePlaylists() {
+    if (!Array.isArray(settings.playlists)) settings.playlists = [];
+    if (!settings.playlists.length) {
+        settings.playlists.push({ id: uid(), name: '我喜欢的音乐', songIds: settings.songs.map(s => s.id) });
+    }
+}
+function getPlaylist(id) { return settings.playlists.find(p => p.id === id); }
+function playlistSongs(id) {
+    const pl = getPlaylist(id);
+    if (!pl) return [];
+    return pl.songIds.map(sid => settings.songs.find(s => s.id === sid)).filter(Boolean);
+}
+function currentPlaylistId() { return activePlaylistId || (settings.playlists[0] && settings.playlists[0].id) || null; }
+function addSong(song, playlistId) {
+    settings.songs.push(song);
+    ensurePlaylists();
+    const pl = getPlaylist(playlistId) || settings.playlists[0];
+    pl.songIds.push(song.id);
+    saveSettings();
+}
+function removeSongFromPlaylist(playlistId, songId) {
+    const pl = getPlaylist(playlistId);
+    if (pl) pl.songIds = pl.songIds.filter(id => id !== songId);
+}
+
 async function addNeteaseById(ncmId) {
     let idx = settings.songs.findIndex(s => s.source === 'netease' && String(s.ncmId) === String(ncmId));
     if (idx >= 0) { toastr.info('这首歌已在列表里'); return; }
@@ -414,8 +446,7 @@ async function addNeteaseById(ncmId) {
             }
         } catch (e) {}
     }
-    settings.songs.push({ id: uid(), title, artist, cover, duration, source: 'netease', ncmId });
-    saveSettings();
+    addSong({ id: uid(), title, artist, cover, duration, source: 'netease', ncmId }, currentPlaylistId());
     renderAll();
 }
 
@@ -425,8 +456,7 @@ async function addUrlSong(url, title) {
     const ncmId = parseNeteaseInput(url);
     if (ncmId) return addNeteaseById(ncmId);
     title = (title || '').trim() || url.split('/').pop().split('?')[0].replace(/\.[a-z0-9]+$/i, '') || '未命名';
-    settings.songs.push({ id: uid(), title, artist: '', source: 'url', url, duration: null });
-    saveSettings();
+    addSong({ id: uid(), title, artist: '', source: 'url', url, duration: null }, currentPlaylistId());
     renderAll();
 }
 
@@ -440,7 +470,7 @@ async function addLocalFiles(files) {
             continue;
         }
         const name = f.name.replace(/\.[a-z0-9]+$/i, '');
-        settings.songs.push({ id, title: name, artist: '', source: 'local', fileId: id, duration: null });
+        addSong({ id, title: name, artist: '', source: 'local', fileId: id, duration: null }, currentPlaylistId());
     }
     saveSettings();
     renderAll();
@@ -455,6 +485,8 @@ async function removeSong(id) {
     if (s.source === 'local') await idbDel(s.fileId);
 
     settings.songs.splice(idx, 1);
+    // 同步清理所有歌单里的残留 id
+    settings.playlists.forEach(pl => { pl.songIds = pl.songIds.filter(sid => sid !== id); });
     if (wasCurrent) {
         if (currentObjectUrl) { URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
         audio.pause();
@@ -712,15 +744,11 @@ function renderNow() {
     if (s) {
         titleEl.text(s.title);
         artistEl.text(s.artist || '未知艺术家');
-        panel.find('.err__home-title').text(s.title);
-        panel.find('.err__home-artist').text(s.artist || '未知艺术家');
         panel.find('.err__now-time').text(fmtDur(audio.currentTime || 0));
         panel.find('.err__now-dur').text(fmtDur(s.duration));
     } else {
         titleEl.text('未在播放');
         artistEl.text('添加歌曲开始播放');
-        panel.find('.err__home-title').text('未在播放');
-        panel.find('.err__home-artist').text('添加歌曲开始播放');
         panel.find('.err__now-time').text('00:00');
         panel.find('.err__now-dur').text('--:--');
     }
@@ -758,12 +786,126 @@ function renderList() {
     });
 }
 
+function fmtHours(sec) {
+    return Math.floor((sec || 0) / 3600) + 'h';
+}
+
+// ---------------- 主页（仿网易云个人主页） ----------------
+function renderHome() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const ctx = duoContext();
+    const name = (ctx && (ctx.name1 || ctx.name)) || '音乐爱好者';
+    panel.find('.err__home-name').text(name);
+    const avatar = panel.find('.err__home-avatar-img');
+    if (settings.duoUserAvatar) duoSetAvatar(avatar, settings.duoUserAvatar);
+    else duoUserAvatar().then(ua => duoSetAvatar(avatar, ua));
+    panel.find('.err__stat-follows').text(settings.profile.follows);
+    panel.find('.err__stat-fans').text(settings.profile.fans);
+    panel.find('.err__stat-level').text('Lv.' + settings.profile.level);
+    panel.find('.err__stat-hours').text(fmtHours(settings.profile.listenSeconds));
+    renderPlaylists();
+}
+
+function renderPlaylists() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    ensurePlaylists();
+    const box = panel.find('.err__playlists');
+    box.empty();
+    if (!settings.playlists.length) {
+        box.append('<div class="err__empty"><div class="err__empty-title">还没有歌单</div></div>');
+        return;
+    }
+    settings.playlists.forEach((pl) => {
+        const songs = playlistSongs(pl.id);
+        const cover = songs.length && songs[0].cover ? songs[0].cover : '';
+        const coverHtml = cover
+            ? `<span class="err__pl-cover"><img src="${escapeHtml(cover)}" alt=""></span>`
+            : `<span class="err__pl-cover err__pl-cover--empty">${ICONS.music}</span>`;
+        box.append(`<div class="err__pl-card" data-id="${pl.id}">
+            ${coverHtml}
+            <div class="err__pl-info">
+                <div class="err__pl-name">${escapeHtml(pl.name)}</div>
+                <div class="err__pl-meta">${songs.length} 首</div>
+            </div>
+            <button type="button" class="err__pl-del" data-id="${pl.id}" title="删除歌单">${ICONS.trash}</button>
+        </div>`);
+    });
+}
+
+function renderPlaylistSongs() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const pl = getPlaylist(activePlaylistId);
+    if (!pl) return;
+    panel.find('.err__playlist-title').text(pl.name);
+    const list = panel.find('.err__playlist-songs');
+    list.empty();
+    const songs = playlistSongs(pl.id);
+    if (!songs.length) {
+        list.append(`<div class="err__empty">
+            <div class="err__empty-icon">${ICONS.music}</div>
+            <div class="err__empty-title">歌单还是空的</div>
+            <div class="err__empty-sub">点右上角「+」添加歌曲</div>
+        </div>`);
+        return;
+    }
+    songs.forEach((s) => {
+        const gi = settings.songs.findIndex(x => x.id === s.id);
+        const isCur = gi === settings.currentIndex;
+        const isPlaying = isCur && playing;
+        const idxHtml = isPlaying
+            ? '<span class="err__eq"><i></i><i></i><i></i></span>'
+            : `<span class="err__row-idx">${String(gi + 1).padStart(2, '0')}</span>`;
+        list.append(`<div class="err__row ${isCur ? 'is-current' : ''}" data-id="${s.id}">
+            <span class="err__row-idxwrap">${idxHtml}</span>
+            <div class="err__row-main">
+                <div class="err__row-title">${escapeHtml(s.title)}</div>
+                <div class="err__row-artist">${escapeHtml(s.artist || '未知艺术家')}</div>
+            </div>
+            <span class="err__row-src err__row-src--${s.source}">${s.source === 'local' ? ICONS.folder : s.source === 'netease' ? ICONS.cloud : ICONS.link}</span>
+            <span class="err__row-dur">${fmtDur(s.duration)}</span>
+            <button type="button" class="err__row-del err__row-del--pl" data-id="${s.id}" title="从歌单移除">${ICONS.trash}</button>
+        </div>`);
+    });
+}
+
+function openPlaylist(id) {
+    activePlaylistId = id;
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    panel.find('.err__home').hide();
+    panel.find('.err__playlist-view').show();
+    renderPlaylistSongs();
+    renderLyric();
+}
+
+function backHome() {
+    activePlaylistId = null;
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    panel.find('.err__playlist-view').hide();
+    panel.find('.err__home').show();
+    renderHome();
+}
+
+function deletePlaylist(id) {
+    if (settings.playlists.length <= 1) { toastr.warning('至少保留一个歌单'); return; }
+    settings.playlists = settings.playlists.filter(p => p.id !== id);
+    if (activePlaylistId === id) backHome();
+    saveSettings();
+    renderPlaylists();
+}
+
 function renderAll() {
     renderList();
     renderNow();
     renderLyric();
     renderControls();
     renderDuo();
+    renderHome();
+    renderPlaylistSongs();
     const panel = $('#st-error');
     if (panel.length) panel.find('.err__count').text(settings.songs.length + ' 首');
 }
@@ -788,13 +930,39 @@ function buildPanel() {
       </div>
 
       <div class="err__body">
-        <!-- 主页：歌词 -->
+        <!-- 主页：仿网易云个人主页 -->
         <section class="err__page" data-page="home">
-          <div class="err__home-now">
-            <div class="err__home-title">未在播放</div>
-            <div class="err__home-artist">添加歌曲开始播放</div>
+          <div class="err__home">
+            <div class="err__home-hero">
+              <span class="err__home-avatar">
+                <img class="err__home-avatar-img" alt="" style="display:none">
+                <span class="err__home-avatar-fallback">${ICONS.user}</span>
+              </span>
+              <div class="err__home-name">音乐爱好者</div>
+              <div class="err__home-stats">
+                <div class="err__home-stat"><b class="err__stat-follows">0</b><span>关注</span></div>
+                <div class="err__home-stat"><b class="err__stat-fans">0</b><span>粉丝</span></div>
+                <div class="err__home-stat"><b class="err__stat-level">Lv.0</b><span>等级</span></div>
+                <div class="err__home-stat"><b class="err__stat-hours">0h</b><span>听歌时长</span></div>
+              </div>
+            </div>
+            <div class="err__home-section">
+              <div class="err__home-section-head">
+                <span class="err__label">我的歌单</span>
+                <button type="button" class="err__playlist-add" title="创建歌单">${ICONS.plus} 创建歌单</button>
+              </div>
+              <div class="err__playlists"></div>
+            </div>
           </div>
-          <div class="err__lrc"></div>
+          <div class="err__playlist-view" style="display:none">
+            <div class="err__playlist-head">
+              <button type="button" class="err__playlist-back" title="返回">${ICONS.back}</button>
+              <span class="err__playlist-title">歌单</span>
+              <button type="button" class="err__playlist-add-song" title="添加歌曲">${ICONS.plus}</button>
+            </div>
+            <div class="err__lrc"></div>
+            <div class="err__playlist-songs"></div>
+          </div>
         </section>
 
         <!-- 播放器：一起听 -->
@@ -923,6 +1091,20 @@ function buildPanel() {
           </div>
         </div>
       </div>
+
+      <div class="err__pl-modal" style="display:none">
+        <div class="err__pl-box">
+          <div class="err__pl-head">
+            <span>创建歌单</span>
+            <button type="button" class="err__pl-close" title="关闭">${ICONS.close}</button>
+          </div>
+          <input type="text" class="err__pl-input" placeholder="歌单名称">
+          <div class="err__pl-actions">
+            <button type="button" class="err__pl-cancel">取消</button>
+            <button type="button" class="err__pl-ok">创建</button>
+          </div>
+        </div>
+      </div>
     </div>`;
     $('body').append(html);
     bindPanelEvents();
@@ -936,6 +1118,55 @@ function bindPanelEvents() {
 
     // 底部 Dock 三页切换
     panel.find('.err__dock-btn').on('click', function () { switchPage($(this).data('page')); });
+
+    // 主页：创建歌单
+    panel.find('.err__playlist-add').on('click', () => {
+        panel.find('.err__pl-input').val('');
+        panel.find('.err__pl-modal').show();
+    });
+    panel.find('.err__pl-close, .err__pl-cancel').on('click', () => panel.find('.err__pl-modal').hide());
+    panel.find('.err__pl-modal').on('click', function (e) { if (e.target === this) $(this).hide(); });
+    panel.find('.err__pl-input').on('keydown', (e) => { if (e.key === 'Enter') panel.find('.err__pl-ok').trigger('click'); });
+    panel.find('.err__pl-ok').on('click', () => {
+        const name = panel.find('.err__pl-input').val().trim();
+        if (!name) { toastr.warning('请输入歌单名称'); return; }
+        settings.playlists.push({ id: uid(), name, songIds: [] });
+        saveSettings();
+        panel.find('.err__pl-modal').hide();
+        renderPlaylists();
+        toastr.success('已创建歌单「' + name + '」');
+    });
+
+    // 主页：歌单卡片点击进入详情、删除歌单
+    panel.find('.err__playlists').on('click', '.err__pl-card', function (e) {
+        if ($(e.target).closest('.err__pl-del').length) return;
+        openPlaylist($(this).data('id'));
+    });
+    panel.find('.err__playlists').on('click', '.err__pl-del', function (e) {
+        e.stopPropagation();
+        deletePlaylist($(this).data('id'));
+    });
+
+    // 歌单详情：返回、添加歌曲（跳到设置页）、点歌播放、从歌单移除
+    panel.find('.err__playlist-back').on('click', backHome);
+    panel.find('.err__playlist-add-song').on('click', () => {
+        switchPage('settings');
+        toastr.info('在下方添加的歌曲会进当前歌单');
+    });
+    panel.find('.err__playlist-songs').on('click', '.err__row', function (e) {
+        if ($(e.target).closest('.err__row-del').length) return;
+        const id = $(this).data('id');
+        const i = settings.songs.findIndex(s => s.id === id);
+        if (i >= 0) playIndex(i);
+    });
+    panel.find('.err__playlist-songs').on('click', '.err__row-del', function (e) {
+        e.stopPropagation();
+        const songId = $(this).data('id');
+        removeSongFromPlaylist(activePlaylistId, songId);
+        saveSettings();
+        renderPlaylistSongs();
+        renderList();
+    });
 
     panel.find('.err__close').on('click', () => togglePanel(false));
     panel.find('.err__play-toggle').on('click', togglePlay);
