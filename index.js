@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.5.9'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.6.0'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -76,6 +76,7 @@ let currentObjectUrl = null; // 本地文件播放时的 object URL，切换时 
 let duoPersonas = null;   // 延迟加载 personas.js 拿 user_avatar
 let chatEditTarget = 'char'; // 对话流编辑目标：'char' | 'user'
 let activePlaylistId = null; // 当前浏览的歌单（歌单详情页），null=个人主页视图
+let pendingNcmSong = null; // 搜索点中的歌，等用户选好歌单再保存
 
 function duoContext() {
     try {
@@ -533,22 +534,37 @@ async function ncmResolveUrl(songId) {
     return null;
 }
 
-async function ncmPlaySong(song) {
-    let idx = settings.songs.findIndex(s => s.source === 'netease' && s.ncmId === song.id);
-    if (idx < 0) {
-        settings.songs.push({
-            id: uid(),
-            title: song.name,
-            artist: song.artist,
-            cover: song.cover,
-            duration: song.duration,
-            source: 'netease',
-            ncmId: song.id,
-        });
-        idx = settings.songs.length - 1;
-        saveSettings();
+// 选歌单弹窗：列出全部歌单供选择
+function renderPickPlaylist() {
+    const el = $('#st-error .err__pick-list');
+    if (!el.length) return;
+    el.empty();
+    const pls = settings.playlists || [];
+    if (!pls.length) {
+        el.append('<div class="err__ncm-hint">还没有歌单，先点下方「新建歌单」</div>');
+        return;
     }
+    pls.forEach(pl => {
+        el.append(`<div class="err__pick-row" data-id="${pl.id}">
+            <span class="err__pick-name">${escapeHtml(pl.name)}</span>
+            <span class="err__pick-cnt">${(pl.songIds || []).length} 首</span>
+        </div>`);
+    });
+}
+
+// 把搜索到的歌存进指定歌单并播放（去重，已存在则只加进歌单）
+async function saveNcmSongToPlaylist(song, playlistId) {
+    let s = settings.songs.find(x => x.source === 'netease' && String(x.ncmId) === String(song.id));
+    if (!s) {
+        s = { id: uid(), title: song.name, artist: song.artist, cover: song.cover, duration: song.duration, source: 'netease', ncmId: song.id };
+        settings.songs.push(s);
+    }
+    ensurePlaylists();
+    const pl = getPlaylist(playlistId) || settings.playlists[0];
+    if (pl && !pl.songIds.includes(s.id)) pl.songIds.push(s.id);
+    saveSettings();
     renderAll();
+    const idx = settings.songs.findIndex(x => x.id === s.id);
     await playIndex(idx);
 }
 
@@ -1006,20 +1022,6 @@ function buildPanel() {
               </div>
               <div class="err__ncm-results"></div>
             </div>
-            <div class="err__set-head err__set-head--add">
-              <span class="err__label">添加歌曲</span>
-            </div>
-            <div class="err__add-row">
-              <input type="text" class="err__url-input" placeholder="粘贴网易云歌曲链接/ID，或音频直链">
-              <button type="button" class="err__add-url" title="添加直链">${ICONS.plus}</button>
-              <button type="button" class="err__add-local" title="添加本地文件">${ICONS.folder}</button>
-            </div>
-            <input type="file" class="err__file-input" accept="audio/*" multiple hidden>
-            <div class="err__set-head err__set-head--list">
-              <span class="err__label">歌单</span>
-              <span class="err__count">0 首</span>
-            </div>
-            <div class="err__list"></div>
           </div>
         </section>
 
@@ -1080,6 +1082,19 @@ function buildPanel() {
           <div class="err__pl-actions">
             <button type="button" class="err__pl-cancel">取消</button>
             <button type="button" class="err__pl-ok">创建</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="err__pick-modal" style="display:none">
+        <div class="err__pl-box">
+          <div class="err__pl-head">
+            <span class="err__pick-title">保存到歌单</span>
+            <button type="button" class="err__pick-close" title="关闭">${ICONS.close}</button>
+          </div>
+          <div class="err__pick-list"></div>
+          <div class="err__pl-actions">
+            <button type="button" class="err__pick-new">＋ 新建歌单</button>
           </div>
         </div>
       </div>
@@ -1162,11 +1177,33 @@ function bindPanelEvents() {
     panel.find('.err__pl-ok').on('click', () => {
         const name = panel.find('.err__pl-input').val().trim();
         if (!name) { toastr.warning('请输入歌单名称'); return; }
-        settings.playlists.push({ id: uid(), name, songIds: [] });
+        const pl = { id: uid(), name, songIds: [] };
+        settings.playlists.push(pl);
         saveSettings();
         panel.find('.err__pl-modal').hide();
         renderPlaylists();
         toastr.success('已创建歌单「' + name + '」');
+        // 若来自「选歌单」的新建，建好后把歌存进去
+        if (pendingNcmSong) {
+            const song = pendingNcmSong;
+            pendingNcmSong = null;
+            saveNcmSongToPlaylist(song, pl.id);
+        }
+    });
+
+    // 选歌单弹窗：点歌单保存+播放、新建歌单、关闭
+    panel.find('.err__pick-close').on('click', () => panel.find('.err__pick-modal').hide());
+    panel.find('.err__pick-modal').on('click', function (e) { if (e.target === this) $(this).hide(); });
+    panel.find('.err__pick-list').on('click', '.err__pick-row', function () {
+        const plId = $(this).data('id');
+        const song = pendingNcmSong;
+        panel.find('.err__pick-modal').hide();
+        if (song) saveNcmSongToPlaylist(song, plId);
+    });
+    panel.find('.err__pick-new').on('click', () => {
+        panel.find('.err__pick-modal').hide();
+        panel.find('.err__pl-input').val('');
+        panel.find('.err__pl-modal').show();
     });
 
     // 主页：歌单行点击进入详情、删除歌单、封面点击换封面
@@ -1196,11 +1233,11 @@ function bindPanelEvents() {
         input.trigger('click');
     });
 
-    // 歌单详情：返回、添加歌曲（跳到设置页）、点歌播放、从歌单移除
+    // 歌单详情：返回、添加歌曲（跳到设置页搜索）、点歌播放、从歌单移除
     panel.find('.err__playlist-back').on('click', backHome);
     panel.find('.err__playlist-add-song').on('click', () => {
         switchPage('settings');
-        toastr.info('在下方添加的歌曲会进当前歌单');
+        toastr.info('搜索歌曲后，选择保存到的歌单即可');
     });
     panel.find('.err__playlist-songs').on('click', '.err__row', function (e) {
         if ($(e.target).closest('.err__row-del').length) return;
@@ -1276,7 +1313,10 @@ function bindPanelEvents() {
     panel.find('.err__ncm-login').on('click', ncmLogin);
     panel.find('.err__ncm-results').on('click', '.err__ncm-row', function () {
         const song = ncm.results.find(s => String(s.id) === String($(this).data('id')));
-        if (song) ncmPlaySong(song);
+        if (!song) return;
+        pendingNcmSong = song;
+        renderPickPlaylist();
+        panel.find('.err__pick-modal').show();
     });
     panel.find('.err__qr-close').on('click', ncmQrClose);
     panel.find('.err__qr-modal').on('click', function (e) { if (e.target === this) ncmQrClose(); });
