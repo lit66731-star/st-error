@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.6.2'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.6.3'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -779,14 +779,12 @@ function applyTextColor() {
     panel.css('--err-text', c || '');
 }
 
-// 标记当前选中的文字颜色色块
+// 同步文字颜色取色器的当前值
 function renderThemeText() {
     const panel = $('#st-error');
     if (!panel.length) return;
-    const cur = settings.profile.textColor || '';
-    panel.find('.err__text-swatch').each(function () {
-        $(this).toggleClass('is-on', String($(this).data('color') || '') === cur);
-    });
+    const cur = settings.profile.textColor || '#5C4A50';
+    panel.find('.err__text-input').val(cur.toLowerCase());
 }
 
 // ---------------- 主题色（把整套粉色换成用户自选色） ----------------
@@ -842,15 +840,12 @@ function applyThemeColor() {
     panel.css('--err-border-2', rgbToHex(border2));
 }
 
-// 同步主题色 UI（颜色输入框值 + 预设高亮）
+// 同步主题色取色器的当前值
 function renderThemeColor() {
     const panel = $('#st-error');
     if (!panel.length) return;
     const cur = settings.profile.accent || '#F5A8BB';
     panel.find('.err__accent-input').val(cur.toLowerCase());
-    panel.find('.err__accent-swatch').each(function () {
-        $(this).toggleClass('is-on', String($(this).data('color') || '').toLowerCase() === cur.toLowerCase());
-    });
 }
 
 // ---------------- 主页（仿网易云个人主页） ----------------
@@ -1120,28 +1115,19 @@ function buildPanel() {
             </div>
             <div class="err__set-head err__set-head--look">
               <span class="err__label">主题色</span>
-              <span class="err__set-hint">选一个颜色，按钮 / 歌词 / 进度条 / 图标都跟着变</span>
+              <span class="err__set-hint">用取色器选任意颜色，按钮 / 歌词 / 进度条 / 图标都跟着变</span>
             </div>
             <div class="err__accent-row">
-              <input type="color" class="err__accent-input" value="#F5A8BB" title="自定义颜色">
-              <button type="button" class="err__accent-swatch" data-color="#F5A8BB" title="粉" style="background:#F5A8BB"></button>
-              <button type="button" class="err__accent-swatch" data-color="#6B9FD6" title="蓝" style="background:#6B9FD6"></button>
-              <button type="button" class="err__accent-swatch" data-color="#6BBF8A" title="绿" style="background:#6BBF8A"></button>
-              <button type="button" class="err__accent-swatch" data-color="#A58BD6" title="紫" style="background:#A58BD6"></button>
-              <button type="button" class="err__accent-swatch" data-color="#E8A06B" title="橙" style="background:#E8A06B"></button>
-              <button type="button" class="err__accent-swatch" data-color="#5FB8B0" title="青" style="background:#5FB8B0"></button>
-              <button type="button" class="err__accent-reset">恢复默认粉</button>
+              <input type="color" class="err__accent-input" value="#F5A8BB" title="选择主题色">
+              <button type="button" class="err__accent-reset">恢复默认</button>
             </div>
             <div class="err__set-head err__set-head--look">
               <span class="err__label">文字颜色</span>
-              <span class="err__set-hint">点击色块更换面板文字颜色</span>
+              <span class="err__set-hint">用取色器选任意文字颜色</span>
             </div>
             <div class="err__text-row">
-              <button type="button" class="err__text-swatch" data-color="#5C4A50" title="深棕" style="background:#5C4A50"></button>
-              <button type="button" class="err__text-swatch" data-color="#2E2A2C" title="炭黑" style="background:#2E2A2C"></button>
-              <button type="button" class="err__text-swatch" data-color="#8A4A5C" title="深玫瑰" style="background:#8A4A5C"></button>
-              <button type="button" class="err__text-swatch" data-color="#FFFFFF" title="白（适合深色背景）" style="background:#FFFFFF"></button>
-              <button type="button" class="err__text-swatch err__text-swatch--reset" data-color="" title="恢复默认文字颜色">默认</button>
+              <input type="color" class="err__text-input" value="#5C4A50" title="选择文字颜色">
+              <button type="button" class="err__text-reset">恢复默认</button>
             </div>
           </div>
         </section>
@@ -1450,24 +1436,24 @@ function bindPanelEvents() {
         toastr.success('已恢复默认背景');
     });
 
-    // 主题：文字颜色
-    panel.find('.err__text-row').on('click', '.err__text-swatch', function () {
-        settings.profile.textColor = $(this).data('color') || '';
+    // 主题：文字颜色（取色器 / 恢复默认）
+    panel.find('.err__text-input').on('input', function () {
+        settings.profile.textColor = $(this).val();
         saveSettings();
         applyTextColor();
         renderThemeText();
-        toastr.success(settings.profile.textColor ? '文字颜色已更换' : '已恢复默认文字颜色');
+    });
+    panel.find('.err__text-reset').on('click', () => {
+        settings.profile.textColor = '';
+        saveSettings();
+        applyTextColor();
+        renderThemeText();
+        toastr.success('已恢复默认文字颜色');
     });
 
-    // 主题：主题色（自定义色 / 预设色块 / 恢复默认粉）
+    // 主题：主题色（取色器 / 恢复默认）
     panel.find('.err__accent-input').on('input', function () {
         settings.profile.accent = $(this).val();
-        saveSettings();
-        applyThemeColor();
-        renderThemeColor();
-    });
-    panel.find('.err__accent-row').on('click', '.err__accent-swatch', function () {
-        settings.profile.accent = $(this).data('color');
         saveSettings();
         applyThemeColor();
         renderThemeColor();
@@ -1477,7 +1463,7 @@ function bindPanelEvents() {
         saveSettings();
         applyThemeColor();
         renderThemeColor();
-        toastr.success('已恢复默认粉');
+        toastr.success('已恢复默认主题色');
     });
 
     // 一起听：点头像换头像

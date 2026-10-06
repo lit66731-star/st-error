@@ -891,59 +891,26 @@ input[type="range"].err__seek::-moz-range-thumb {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 24px 60px rgba(92, 74, 80, 0.24);
 }
 
-/* 主题：文字颜色色块 */
-.err__text-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.err__text-swatch {
-    width: 30px; height: 30px; padding: 0;
-    border-radius: 50%;
-    border: 2px solid #fff;
-    box-shadow: 0 0 0 1px var(--err-border-2), 0 3px 8px rgba(var(--err-rose-deep-rgb), 0.18);
-    box-sizing: border-box;
-    cursor: pointer;
-    transition: transform 0.12s, box-shadow 0.15s;
-}
-.err__text-swatch:hover { transform: scale(1.12); }
-.err__text-swatch:active { transform: scale(0.9); }
-.err__text-swatch.is-on {
-    box-shadow: 0 0 0 2px var(--err-rose), 0 3px 10px rgba(var(--err-rose-deep-rgb), 0.3);
-}
-.err__text-swatch--reset {
-    width: auto; height: 30px; padding: 0 13px;
-    border-radius: 999px; border: 1px dashed var(--err-rose);
-    display: inline-flex; align-items: center; justify-content: center;
-    background: rgba(255, 255, 255, 0.5); color: var(--err-rose-deep); font-size: 12px;
-}
-.err__text-swatch--reset:hover { background: var(--err-rose-bg); }
-
-/* 主题：主题色（自定义取色器 + 预设色块 + 恢复默认） */
-.err__accent-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.err__accent-input {
+/* 主题：文字颜色 / 主题色（取色器 + 恢复默认） */
+.err__text-row, .err__accent-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.err__text-input, .err__accent-input {
     width: 34px; height: 34px; padding: 0; margin: 0;
     border: 2px solid #fff; border-radius: 50%;
     background: none; cursor: pointer;
     box-shadow: 0 0 0 1px var(--err-border-2), 0 3px 8px rgba(var(--err-rose-deep-rgb), 0.18);
 }
+.err__text-input::-webkit-color-swatch-wrapper,
 .err__accent-input::-webkit-color-swatch-wrapper { padding: 0; }
+.err__text-input::-webkit-color-swatch,
 .err__accent-input::-webkit-color-swatch { border: none; border-radius: 50%; }
+.err__text-input::-moz-color-swatch,
 .err__accent-input::-moz-color-swatch { border: none; border-radius: 50%; }
-.err__accent-swatch {
-    width: 30px; height: 30px; padding: 0;
-    border-radius: 50%; border: 2px solid #fff;
-    box-shadow: 0 0 0 1px var(--err-border-2), 0 3px 8px rgba(var(--err-rose-deep-rgb), 0.14);
-    box-sizing: border-box; cursor: pointer;
-    transition: transform 0.12s, box-shadow 0.15s;
-}
-.err__accent-swatch:hover { transform: scale(1.12); }
-.err__accent-swatch:active { transform: scale(0.9); }
-.err__accent-swatch.is-on {
-    box-shadow: 0 0 0 2px var(--err-rose), 0 3px 10px rgba(var(--err-rose-deep-rgb), 0.28);
-}
-.err__accent-reset {
+.err__text-reset, .err__accent-reset {
     height: 30px; padding: 0 13px; font-size: 12px; cursor: pointer;
     border-radius: 999px; border: 1px dashed var(--err-rose);
     background: rgba(255, 255, 255, 0.24); color: var(--err-rose-deep);
 }
-.err__accent-reset:hover { background: var(--err-rose-bg); }
+.err__text-reset:hover, .err__accent-reset:hover { background: var(--err-rose-bg); }
 
 /* ============ 移动端（≤1000px） ============ */
 @media screen and (max-width: 1000px) {
