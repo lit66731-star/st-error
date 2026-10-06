@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.6.1'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.6.2'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -46,7 +46,7 @@ const LOOP_MODES = [
 let settings = {
     songs: [],          // { id, title, artist, source: 'url'|'local'|'netease', url?, fileId?, ncmId?, cover?, duration? }
     playlists: [],      // 歌单 [{ id, name, songIds: [songId...] }]
-    profile: { follows: 0, fans: 0, level: 0, listenSeconds: 0, nickname: '', avatarUrl: '', bg: '', textColor: '' }, // 个人主页资料；nickname/avatarUrl 可来自网易云，bg=面板背景，textColor=面板文字颜色
+    profile: { follows: 0, fans: 0, level: 0, listenSeconds: 0, nickname: '', avatarUrl: '', bg: '', textColor: '', accent: '' }, // 个人主页资料；nickname/avatarUrl 可来自网易云，bg=面板背景，textColor=面板文字颜色，accent=主题色
     currentIndex: -1,
     loopMode: 'list',
     volume: 0.8,
@@ -198,7 +198,7 @@ function loadSettings() {
             if (!Array.isArray(settings.songs)) settings.songs = [];
         }
     } catch (e) { settings.songs = []; }
-    if (!settings.profile) settings.profile = { follows: 0, fans: 0, level: 0, listenSeconds: 0, nickname: '', avatarUrl: '', bg: '', textColor: '' };
+    if (!settings.profile) settings.profile = { follows: 0, fans: 0, level: 0, listenSeconds: 0, nickname: '', avatarUrl: '', bg: '', textColor: '', accent: '' };
     ensurePlaylists();
 }
 
@@ -789,6 +789,70 @@ function renderThemeText() {
     });
 }
 
+// ---------------- 主题色（把整套粉色换成用户自选色） ----------------
+function hexToRgb(hex) {
+    let h = (hex || '').replace('#', '').trim();
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+    const n = parseInt(h, 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function rgbToHex({ r, g, b }) {
+    const p = x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0');
+    return '#' + p(r) + p(g) + p(b);
+}
+function mixRgb(c1, c2, t) { // t = c1 占比
+    return { r: c1.r * t + c2.r * (1 - t), g: c1.g * t + c2.g * (1 - t), b: c1.b * t + c2.b * (1 - t) };
+}
+
+// 应用主题色：覆盖整套 accent token（rose + 五个别名 + 中性浅底），空 = 还原默认粉
+function applyThemeColor() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const c = (settings.profile && settings.profile.accent) || '';
+    const accentKeys = ['--err-rose', '--err-apricot', '--err-sage', '--err-sky', '--err-lilac', '--err-accent'];
+    const deepKeys = ['--err-rose-deep', '--err-apricot-deep', '--err-sage-deep', '--err-sky-deep', '--err-lilac-deep', '--err-accent-deep'];
+    const bgKeys = ['--err-rose-bg', '--err-apricot-bg', '--err-sage-bg', '--err-sky-bg', '--err-lilac-bg', '--err-accent-bg'];
+    const all = [...accentKeys, ...deepKeys, ...bgKeys, '--err-danger',
+        '--err-rose-rgb', '--err-rose-deep-rgb', '--err-rose-bg-rgb',
+        '--err-bg', '--err-surface-2', '--err-border', '--err-border-2'];
+    if (!c) {
+        all.forEach(k => panel.css(k, ''));
+        return;
+    }
+    const acc = hexToRgb(c);
+    if (!acc) return;
+    const deep = { r: acc.r * 0.82, g: acc.g * 0.82, b: acc.b * 0.82 };
+    const bg = mixRgb(acc, { r: 255, g: 255, b: 255 }, 0.24);
+    const surface2 = mixRgb(acc, { r: 255, g: 255, b: 255 }, 0.14);
+    const border = mixRgb(acc, { r: 255, g: 255, b: 255 }, 0.22);
+    const border2 = mixRgb(acc, { r: 255, g: 255, b: 255 }, 0.32);
+    const panelBg = mixRgb(acc, { r: 255, g: 255, b: 255 }, 0.06);
+    const H = rgbToHex(acc), HD = rgbToHex(deep), HB = rgbToHex(bg);
+    accentKeys.forEach(k => panel.css(k, H));
+    deepKeys.forEach(k => panel.css(k, HD));
+    bgKeys.forEach(k => panel.css(k, HB));
+    panel.css('--err-danger', HD);
+    panel.css('--err-rose-rgb', `${acc.r}, ${acc.g}, ${acc.b}`);
+    panel.css('--err-rose-deep-rgb', `${deep.r}, ${deep.g}, ${deep.b}`);
+    panel.css('--err-rose-bg-rgb', `${bg.r}, ${bg.g}, ${bg.b}`);
+    panel.css('--err-bg', rgbToHex(panelBg));
+    panel.css('--err-surface-2', rgbToHex(surface2));
+    panel.css('--err-border', rgbToHex(border));
+    panel.css('--err-border-2', rgbToHex(border2));
+}
+
+// 同步主题色 UI（颜色输入框值 + 预设高亮）
+function renderThemeColor() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const cur = settings.profile.accent || '#F5A8BB';
+    panel.find('.err__accent-input').val(cur.toLowerCase());
+    panel.find('.err__accent-swatch').each(function () {
+        $(this).toggleClass('is-on', String($(this).data('color') || '').toLowerCase() === cur.toLowerCase());
+    });
+}
+
 // ---------------- 主页（仿网易云个人主页） ----------------
 function renderHome() {
     const panel = $('#st-error');
@@ -1053,6 +1117,20 @@ function buildPanel() {
             <div class="err__look-row">
               <button type="button" class="err__bg-btn">${ICONS.folder} 更换背景</button>
               <button type="button" class="err__bg-reset">恢复默认</button>
+            </div>
+            <div class="err__set-head err__set-head--look">
+              <span class="err__label">主题色</span>
+              <span class="err__set-hint">选一个颜色，按钮 / 歌词 / 进度条 / 图标都跟着变</span>
+            </div>
+            <div class="err__accent-row">
+              <input type="color" class="err__accent-input" value="#F5A8BB" title="自定义颜色">
+              <button type="button" class="err__accent-swatch" data-color="#F5A8BB" title="粉" style="background:#F5A8BB"></button>
+              <button type="button" class="err__accent-swatch" data-color="#6B9FD6" title="蓝" style="background:#6B9FD6"></button>
+              <button type="button" class="err__accent-swatch" data-color="#6BBF8A" title="绿" style="background:#6BBF8A"></button>
+              <button type="button" class="err__accent-swatch" data-color="#A58BD6" title="紫" style="background:#A58BD6"></button>
+              <button type="button" class="err__accent-swatch" data-color="#E8A06B" title="橙" style="background:#E8A06B"></button>
+              <button type="button" class="err__accent-swatch" data-color="#5FB8B0" title="青" style="background:#5FB8B0"></button>
+              <button type="button" class="err__accent-reset">恢复默认粉</button>
             </div>
             <div class="err__set-head err__set-head--look">
               <span class="err__label">文字颜色</span>
@@ -1381,6 +1459,27 @@ function bindPanelEvents() {
         toastr.success(settings.profile.textColor ? '文字颜色已更换' : '已恢复默认文字颜色');
     });
 
+    // 主题：主题色（自定义色 / 预设色块 / 恢复默认粉）
+    panel.find('.err__accent-input').on('input', function () {
+        settings.profile.accent = $(this).val();
+        saveSettings();
+        applyThemeColor();
+        renderThemeColor();
+    });
+    panel.find('.err__accent-row').on('click', '.err__accent-swatch', function () {
+        settings.profile.accent = $(this).data('color');
+        saveSettings();
+        applyThemeColor();
+        renderThemeColor();
+    });
+    panel.find('.err__accent-reset').on('click', () => {
+        settings.profile.accent = '';
+        saveSettings();
+        applyThemeColor();
+        renderThemeColor();
+        toastr.success('已恢复默认粉');
+    });
+
     // 一起听：点头像换头像
     panel.find('.err__duo-avatar').on('click', function () {
         duoPickAvatar($(this).closest('.err__duo-person').hasClass('err__duo-person--char') ? 'char' : 'user');
@@ -1472,6 +1571,8 @@ jQuery(async () => {
     applyPanelBg();
     applyTextColor();
     renderThemeText();
+    applyThemeColor();
+    renderThemeColor();
 
     // 音频事件
     audio.addEventListener('play', () => { playing = true; renderControls(); renderNow(); });
