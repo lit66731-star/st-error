@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.6.0'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.6.1'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -46,7 +46,7 @@ const LOOP_MODES = [
 let settings = {
     songs: [],          // { id, title, artist, source: 'url'|'local'|'netease', url?, fileId?, ncmId?, cover?, duration? }
     playlists: [],      // 歌单 [{ id, name, songIds: [songId...] }]
-    profile: { follows: 0, fans: 0, level: 0, listenSeconds: 0, nickname: '', avatarUrl: '', bg: '' }, // 个人主页资料；nickname/avatarUrl 可来自网易云，bg=面板背景
+    profile: { follows: 0, fans: 0, level: 0, listenSeconds: 0, nickname: '', avatarUrl: '', bg: '', textColor: '' }, // 个人主页资料；nickname/avatarUrl 可来自网易云，bg=面板背景，textColor=面板文字颜色
     currentIndex: -1,
     loopMode: 'list',
     volume: 0.8,
@@ -198,7 +198,7 @@ function loadSettings() {
             if (!Array.isArray(settings.songs)) settings.songs = [];
         }
     } catch (e) { settings.songs = []; }
-    if (!settings.profile) settings.profile = { follows: 0, fans: 0, level: 0, listenSeconds: 0, nickname: '', avatarUrl: '', bg: '' };
+    if (!settings.profile) settings.profile = { follows: 0, fans: 0, level: 0, listenSeconds: 0, nickname: '', avatarUrl: '', bg: '', textColor: '' };
     ensurePlaylists();
 }
 
@@ -771,6 +771,24 @@ function applyPanelBg() {
     panel.toggleClass('err--has-bg', !!bg);
 }
 
+// 应用面板文字颜色（覆盖 --err-text；空 = 用回样式表默认）
+function applyTextColor() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const c = settings.profile && settings.profile.textColor;
+    panel.css('--err-text', c || '');
+}
+
+// 标记当前选中的文字颜色色块
+function renderThemeText() {
+    const panel = $('#st-error');
+    if (!panel.length) return;
+    const cur = settings.profile.textColor || '';
+    panel.find('.err__text-swatch').each(function () {
+        $(this).toggleClass('is-on', String($(this).data('color') || '') === cur);
+    });
+}
+
 // ---------------- 主页（仿网易云个人主页） ----------------
 function renderHome() {
     const panel = $('#st-error');
@@ -1035,6 +1053,17 @@ function buildPanel() {
             <div class="err__look-row">
               <button type="button" class="err__bg-btn">${ICONS.folder} 更换背景</button>
               <button type="button" class="err__bg-reset">恢复默认</button>
+            </div>
+            <div class="err__set-head err__set-head--look">
+              <span class="err__label">文字颜色</span>
+              <span class="err__set-hint">点击色块更换面板文字颜色</span>
+            </div>
+            <div class="err__text-row">
+              <button type="button" class="err__text-swatch" data-color="#5C4A50" title="深棕" style="background:#5C4A50"></button>
+              <button type="button" class="err__text-swatch" data-color="#2E2A2C" title="炭黑" style="background:#2E2A2C"></button>
+              <button type="button" class="err__text-swatch" data-color="#8A4A5C" title="深玫瑰" style="background:#8A4A5C"></button>
+              <button type="button" class="err__text-swatch" data-color="#FFFFFF" title="白（适合深色背景）" style="background:#FFFFFF"></button>
+              <button type="button" class="err__text-swatch err__text-swatch--reset" data-color="" title="恢复默认文字颜色">默认</button>
             </div>
           </div>
         </section>
@@ -1343,6 +1372,15 @@ function bindPanelEvents() {
         toastr.success('已恢复默认背景');
     });
 
+    // 主题：文字颜色
+    panel.find('.err__text-row').on('click', '.err__text-swatch', function () {
+        settings.profile.textColor = $(this).data('color') || '';
+        saveSettings();
+        applyTextColor();
+        renderThemeText();
+        toastr.success(settings.profile.textColor ? '文字颜色已更换' : '已恢复默认文字颜色');
+    });
+
     // 一起听：点头像换头像
     panel.find('.err__duo-avatar').on('click', function () {
         duoPickAvatar($(this).closest('.err__duo-person').hasClass('err__duo-person--char') ? 'char' : 'user');
@@ -1432,6 +1470,8 @@ jQuery(async () => {
     buildButton();
     buildPanel();
     applyPanelBg();
+    applyTextColor();
+    renderThemeText();
 
     // 音频事件
     audio.addEventListener('play', () => { playing = true; renderControls(); renderNow(); });

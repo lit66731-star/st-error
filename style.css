@@ -730,9 +730,12 @@ input[type="range"].err__seek::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
     width: 12px; height: 12px;
+    /* WebKit 默认把 thumb 顶到轨道上缘，往上溢出；用负 margin 拉回，让 12px 圆钮垂直居中在 3px 轨道上 */
+    margin-top: calc((3px - 12px) / 2);
     border-radius: 50%;
     background: #fff;
     border: 2px solid var(--err-rose);
+    box-shadow: 0 1px 3px rgba(230, 128, 152, 0.35);
     box-sizing: border-box;
     cursor: pointer;
 }
@@ -741,6 +744,7 @@ input[type="range"].err__seek::-moz-range-thumb {
     border-radius: 50%;
     background: #fff;
     border: 2px solid var(--err-rose);
+    box-shadow: 0 1px 3px rgba(230, 128, 152, 0.35);
     box-sizing: border-box;
     cursor: pointer;
 }
@@ -758,6 +762,153 @@ input[type="range"].err__seek::-moz-range-thumb {
 #st-error-button {
     cursor: pointer;
 }
+
+/* ============ 液态玻璃（按钮 / 输入框 / 卡片 / 弹窗） ============ */
+/* 统一半透明白 + 背景模糊 + 内高光细边，换任意背景都能自然融入 */
+.err__ctrl,
+.err__play-toggle,
+.err__ncm-input,
+.err__ncm-api,
+.err__ncm-cookie,
+.err__ncm-search,
+.err__ncm-login,
+.err__ncm-gear,
+.err__ncm-save,
+.err__pl-input,
+.err__pl-cancel,
+.err__pl-ok,
+.err__pick-new,
+.err__bg-btn,
+.err__bg-reset,
+.err__add-url,
+.err__add-local,
+.err__profile-field input,
+.err__chat-input {
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+}
+
+/* 播放器控制小圆钮：透明 → 磨砂玻璃圆钮 */
+.err__ctrl {
+    background: rgba(255, 255, 255, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 3px 10px rgba(230, 128, 152, 0.12);
+}
+.err__ctrl:hover {
+    background: rgba(253, 228, 234, 0.75);
+    color: var(--err-rose-deep);
+    border-color: rgba(255, 255, 255, 0.8);
+}
+
+/* 主播放/暂停键：半透明粉 + 玻璃内高光，做成液态圆珠 */
+.err__play-toggle {
+    background: linear-gradient(135deg, rgba(245, 168, 187, 0.88), rgba(230, 128, 152, 0.88));
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.5), inset 0 -3px 6px rgba(230, 128, 152, 0.22), 0 6px 18px rgba(230, 128, 152, 0.35);
+}
+.err__play-toggle:hover {
+    background: linear-gradient(135deg, rgba(245, 168, 187, 0.95), rgba(230, 128, 152, 0.95));
+    filter: none;
+}
+
+/* Dock 当前页按钮：实底 → 半透明粉玻璃 */
+.err__dock-btn.is-on {
+    background: rgba(253, 228, 234, 0.62);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(10px) saturate(150%);
+    -webkit-backdrop-filter: blur(10px) saturate(150%);
+}
+
+/* 输入框：磨砂白底 */
+.err__ncm-input, .err__ncm-api, .err__ncm-cookie, .err__pl-input,
+.err__profile-field input, .err__chat-input {
+    background: rgba(255, 255, 255, 0.55);
+    border-color: rgba(255, 255, 255, 0.7);
+}
+
+/* 设置页图标按钮（登录/齿轮/保存）：磨砂白底 */
+.err__ncm-login, .err__ncm-gear, .err__ncm-save {
+    background: rgba(255, 255, 255, 0.5);
+    border-color: rgba(255, 255, 255, 0.7);
+}
+.err__ncm-login:hover, .err__ncm-gear:hover, .err__ncm-save:hover {
+    background: rgba(255, 255, 255, 0.78);
+    border-color: rgba(255, 255, 255, 0.85);
+}
+
+/* 搜索键：半透明粉玻璃 */
+.err__ncm-search {
+    background: rgba(245, 168, 187, 0.88);
+    border-color: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.err__ncm-search:hover {
+    background: rgba(230, 128, 152, 0.92);
+    border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* 主按钮（保存/更换背景/添加直链）：半透明粉玻璃 */
+.err__pl-ok, .err__bg-btn, .err__add-url {
+    background: rgba(245, 168, 187, 0.88);
+    border-color: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    color: #fff;
+}
+.err__pl-ok:hover, .err__bg-btn:hover, .err__add-url:hover {
+    background: rgba(230, 128, 152, 0.94);
+    border-color: rgba(255, 255, 255, 0.6);
+    color: #fff;
+}
+
+/* 次级按钮（取消/恢复默认/新建歌单/本地）：磨砂白玻璃 */
+.err__pl-cancel, .err__bg-reset, .err__pick-new, .err__add-local {
+    background: rgba(255, 255, 255, 0.5);
+    border-color: rgba(255, 255, 255, 0.7);
+}
+.err__pl-cancel:hover, .err__bg-reset:hover {
+    background: rgba(255, 255, 255, 0.78);
+    border-color: rgba(255, 255, 255, 0.85);
+    color: var(--err-text);
+}
+.err__pick-new { border: 1px dashed rgba(230, 128, 152, 0.7); }
+.err__pick-new:hover, .err__add-local:hover {
+    background: rgba(253, 228, 234, 0.7);
+    border-color: rgba(255, 255, 255, 0.8);
+    color: var(--err-rose-deep);
+}
+
+/* 弹窗卡片：更强模糊的磨砂玻璃，浮在背景上 */
+.err__pl-box, .err__qr-box {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(26px) saturate(170%);
+    -webkit-backdrop-filter: blur(26px) saturate(170%);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 24px 60px rgba(92, 74, 80, 0.28);
+}
+
+/* 主题：文字颜色色块 */
+.err__text-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.err__text-swatch {
+    width: 30px; height: 30px; padding: 0;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px var(--err-border-2), 0 3px 8px rgba(230, 128, 152, 0.18);
+    box-sizing: border-box;
+    cursor: pointer;
+    transition: transform 0.12s, box-shadow 0.15s;
+}
+.err__text-swatch:hover { transform: scale(1.12); }
+.err__text-swatch:active { transform: scale(0.9); }
+.err__text-swatch.is-on {
+    box-shadow: 0 0 0 2px var(--err-rose), 0 3px 10px rgba(230, 128, 152, 0.3);
+}
+.err__text-swatch--reset {
+    width: auto; height: 30px; padding: 0 13px;
+    border-radius: 999px; border: 1px dashed var(--err-rose);
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(255, 255, 255, 0.5); color: var(--err-rose-deep); font-size: 12px;
+}
+.err__text-swatch--reset:hover { background: var(--err-rose-bg); }
 
 /* ============ 移动端（≤1000px） ============ */
 @media screen and (max-width: 1000px) {
