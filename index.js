@@ -1,12 +1,12 @@
 /* ==========================================================================
    Error · 音乐播放器（SillyTavern 第三方扩展）
    界面：统一浅粉单色 · 可爱少女风；底部 Dock 三页（主页=个人主页+歌单 / 播放器=一起听 / 设置=接音乐 APP）。
-   歌源：本地文件（存 IndexedDB）+ 直链 URL + 网易云（需自建 NeteaseCloudMusicApi）；
+   歌源：本地文件（存 IndexedDB）+ 直链 URL + 网易云（免后端 Meting 聚合 / 可选自建 NeteaseCloudMusicApi）；
    播放内核用 HTML5 Audio。
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.6.3'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.7.0'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -251,6 +251,44 @@ async function idbDel(id) {
 // 每个歌源只需实现 resolve(song) → 可播放地址；新增平台（QQ/酷狗等）在此注册即可
 const NCM_OUTER = (id) => `https://music.163.com/song/media/outer/url?id=${id}.mp3`;
 
+// ---------------- 免后端歌源（Meting 聚合，不依赖自建 API） ----------------
+const METING_BASE = 'https://met.liiiu.cn/meting/api'; // 免后端聚合接口（netease）
+const metingUrl = (id) => `${METING_BASE}?server=netease&type=url&id=${id}`;   // 播放直链（302 到 mp3，<audio> 可跟随重定向）
+const metingLrc = (id) => `${METING_BASE}?server=netease&type=lrc&id=${id}`;   // 歌词纯文本
+
+// 从 Meting 搜索结果里的 url/lrc 指针中取出网易云歌曲 id
+function metingExtractId(item) {
+    const m = String((item && (item.url || item.lrc)) || '').match(/[?&]id=(\d+)/);
+    return m ? m[1] : '';
+}
+
+// 免后端网易云搜索（Meting 聚合）
+async function metingSearchNetEase(keyword) {
+    const res = await fetch(`${METING_BASE}?server=netease&type=search&id=${encodeURIComponent(keyword)}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const list = await res.json();
+    return (Array.isArray(list) ? list : [])
+        .map(it => ({
+            id: metingExtractId(it),
+            name: it.title || '',
+            artist: it.author || '',
+            cover: it.pic || '',
+            duration: null,
+        }))
+        .filter(s => s.id);
+}
+
+// 免后端取歌名/歌手/封面（粘贴链接/ID 时补全信息）
+async function metingSongMeta(id) {
+    try {
+        const res = await fetch(`${METING_BASE}?server=netease&type=song&id=${id}`);
+        if (!res.ok) return null;
+        const list = await res.json();
+        const t = Array.isArray(list) && list[0];
+        return t ? { title: t.title || '', artist: t.author || '', cover: t.pic || '' } : null;
+    } catch (e) { return null; }
+}
+
 const SOURCES = {
     url: {
         resolve: async (s) => s.url,
@@ -267,8 +305,8 @@ const SOURCES = {
     netease: {
         errorMsg: '解析网易云播放地址失败',
         resolve: async (s) => {
-            // 没配 API：走公开外链（免登录，仅限免费/有版权的歌）
-            if (!settings.neteaseApi) return NCM_OUTER(s.ncmId);
+            // 没配 API：免后端——Meting 直链（主）；失败由 <audio> 报错，仍可手动退回直链
+            if (!settings.neteaseApi) return metingUrl(s.ncmId);
             // 签名链接有时效，5 分钟内复用缓存
             if (!s.resolvedUrl || !s.resolvedAt || (Date.now() - s.resolvedAt) > 5 * 60 * 1000) {
                 const url = await ncmResolveUrl(s.ncmId);
@@ -319,7 +357,7 @@ async function playIndex(i) {
     try {
         audio.src = src;
         await audio.play();
-        if (s.source === 'netease' && settings.neteaseApi) ncmLoadLyric(s.ncmId);
+        if (s.source === 'netease') ncmLoadLyric(s.ncmId);
         renderDuoChat();
     } catch (e) {
         toastr.warning('播放失败：' + (s.title || s.url));
@@ -397,7 +435,7 @@ async function addNeteaseById(ncmId) {
     let idx = settings.songs.findIndex(s => s.source === 'netease' && String(s.ncmId) === String(ncmId));
     if (idx >= 0) { toastr.info('这首歌已在列表里'); return; }
     let title = '网易云 #' + ncmId, artist = '', cover = '', duration = null;
-    // 配了 API 就顺手取歌名；没配则用占位名（外链无需 API 也能播）
+    // 配了 API 就顺手取歌名；没配则走 Meting 免后端补全（外链无需 API 也能播）
     if (settings.neteaseApi) {
         try {
             const d = await ncmFetch(`/song/detail?ids=${ncmId}`);
@@ -409,6 +447,9 @@ async function addNeteaseById(ncmId) {
                 duration = (t.dt || 0) / 1000;
             }
         } catch (e) {}
+    } else {
+        const meta = await metingSongMeta(ncmId);
+        if (meta) { title = meta.title || title; artist = meta.artist || artist; cover = meta.cover || cover; }
     }
     addSong({ id: uid(), title, artist, cover, duration, source: 'netease', ncmId }, currentPlaylistId());
     renderAll();
@@ -489,18 +530,23 @@ async function ncmSearch(keyword) {
     const el = $('#st-error .err__ncm-results');
     if (el.length) el.html('<div class="err__ncm-hint">搜索中…</div>');
     try {
-        const d = await ncmFetch(`/search?keywords=${encodeURIComponent(keyword)}&limit=30&type=1`);
-        const songs = (d && d.result && d.result.songs) || [];
-        ncm.results = songs.map(s => ({
-            id: s.id,
-            name: s.name,
-            artist: (s.ar || s.artists || []).map(a => a.name).join(' / '),
-            cover: ((s.al || s.album || {}).picUrl) || '',
-            duration: (s.dt || s.duration || 0) / 1000,
-        }));
+        if (settings.neteaseApi) {
+            const d = await ncmFetch(`/search?keywords=${encodeURIComponent(keyword)}&limit=30&type=1`);
+            const songs = (d && d.result && d.result.songs) || [];
+            ncm.results = songs.map(s => ({
+                id: s.id,
+                name: s.name,
+                artist: (s.ar || s.artists || []).map(a => a.name).join(' / '),
+                cover: ((s.al || s.album || {}).picUrl) || '',
+                duration: (s.dt || s.duration || 0) / 1000,
+            }));
+        } else {
+            // 免后端：Meting 聚合搜索，无需配置 API
+            ncm.results = await metingSearchNetEase(keyword);
+        }
         renderNcmResults();
     } catch (e) {
-        if (el.length) el.html('<div class="err__ncm-hint">搜索失败，请检查 API 地址</div>');
+        if (el.length) el.html('<div class="err__ncm-hint">搜索失败，请检查网络（免后端聚合接口可能暂时不可用）</div>');
     }
 }
 
@@ -584,9 +630,18 @@ function parseLrc(lrc) {
 
 async function ncmLoadLyric(songId) {
     try {
-        const d = await ncmFetch(`/lyric?id=${songId}`);
-        ncm.lyricLines = parseLrc(d && d.lrc && d.lrc.lyric);
-        ncm.lyricTrans = parseLrc(d && d.tlyric && d.tlyric.lyric);
+        let lyric = '', tlyric = '';
+        if (settings.neteaseApi) {
+            const d = await ncmFetch(`/lyric?id=${songId}`);
+            lyric = d && d.lrc && d.lrc.lyric;
+            tlyric = d && d.tlyric && d.tlyric.lyric;
+        } else {
+            // 免后端：Meting 歌词（纯 LRC 文本，含逐行时间戳）
+            const res = await fetch(metingLrc(songId));
+            if (res.ok) lyric = await res.text();
+        }
+        ncm.lyricLines = parseLrc(lyric);
+        ncm.lyricTrans = parseLrc(tlyric);
     } catch (e) {
         ncm.lyricLines = []; ncm.lyricTrans = [];
     }
@@ -599,7 +654,7 @@ function renderLyric() {
     ncm.lyricCur = -1;
     el.empty();
     if (!ncm.lyricLines.length) {
-        el.html('<div class="err__lrc-empty"><span class="err__lrc-empty-t">暂无歌词</span><span class="err__lrc-empty-s">在「设置」接入网易云并播放有歌词的歌，即可在这里看歌词</span></div>');
+        el.html('<div class="err__lrc-empty"><span class="err__lrc-empty-t">暂无歌词</span><span class="err__lrc-empty-s">这首歌暂无歌词（纯音乐或版权受限）</span></div>');
         return;
     }
     const trans = ncm.lyricTrans || [];
