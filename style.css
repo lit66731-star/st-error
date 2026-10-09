@@ -609,7 +609,7 @@
 }
 .err__ncm-input::placeholder { color: var(--err-text-3); }
 .err__ncm-input:focus { outline: none; border-color: var(--err-sky); }
-.err__ncm-search, .err__ncm-login, .err__ncm-gear, .err__ncm-save {
+.err__ncm-search, .err__ncm-login, .err__ncm-gear, .err__ncm-save, .err__ncm-sync {
     width: 34px; height: 34px; flex: 0 0 auto;
     border: 1px solid var(--err-border-2); background: transparent; color: var(--err-text-2);
     border-radius: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;
@@ -617,8 +617,8 @@
 }
 .err__ncm-search { background: var(--err-sky); color: #fff; border-color: var(--err-sky); }
 .err__ncm-search:hover { background: var(--err-sky-deep); color: #fff; border-color: var(--err-sky-deep); }
-.err__ncm-login:hover, .err__ncm-gear:hover, .err__ncm-save:hover { background: var(--err-surface-2); color: var(--err-text); }
-.err__ncm-search svg, .err__ncm-login svg, .err__ncm-gear svg, .err__ncm-save svg { width: 16px; height: 16px; }
+.err__ncm-login:hover, .err__ncm-gear:hover, .err__ncm-save:hover, .err__ncm-sync:hover { background: var(--err-surface-2); color: var(--err-text); }
+.err__ncm-search svg, .err__ncm-login svg, .err__ncm-gear svg, .err__ncm-save svg, .err__ncm-sync svg { width: 16px; height: 16px; }
 .err__ncm-login.is-logged { color: var(--err-sage-deep); border-color: var(--err-sage); background: var(--err-sage-bg); }
 
 .err__ncm-settings { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
@@ -631,7 +631,7 @@
 .err__ncm-api:focus, .err__ncm-cookie:focus { outline: none; border-color: var(--err-sky); }
 .err__ncm-save { align-self: flex-end; padding: 0 12px; height: 30px; font-size: 12px; }
 
-.err__ncm-results {
+.err__ncm-results, .err__ncm-plists {
     max-height: 300px; overflow-y: auto; margin-top: 6px;
     border: 1px solid var(--err-border); border-radius: 8px; background: var(--err-surface);
 }
@@ -779,6 +779,7 @@ input[type="range"].err__seek::-moz-range-thumb {
 .err__ncm-login,
 .err__ncm-gear,
 .err__ncm-save,
+.err__ncm-sync,
 .err__pl-input,
 .err__pl-cancel,
 .err__pl-ok,
@@ -832,11 +833,11 @@ input[type="range"].err__seek::-moz-range-thumb {
 }
 
 /* 设置页图标按钮（登录/齿轮/保存）：磨砂白底 */
-.err__ncm-login, .err__ncm-gear, .err__ncm-save {
+.err__ncm-login, .err__ncm-gear, .err__ncm-save, .err__ncm-sync {
     background: rgba(255, 255, 255, 0.20);
     border-color: rgba(255, 255, 255, 0.55);
 }
-.err__ncm-login:hover, .err__ncm-gear:hover, .err__ncm-save:hover {
+.err__ncm-login:hover, .err__ncm-gear:hover, .err__ncm-save:hover, .err__ncm-sync:hover {
     background: rgba(255, 255, 255, 0.45);
     border-color: rgba(255, 255, 255, 0.7);
 }

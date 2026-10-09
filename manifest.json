@@ -1,9 +1,9 @@
 {
     "name": "Error",
     "display_name": "Error",
-    "description": "网易云风格音乐播放器：网易云搜索（免后端 Meting 聚合，可自建 NeteaseCloudMusicApi 升级 320k/会员）+ 本地文件 + 直链 URL 播放、同步歌词、歌单、三种循环模式、进度/音量控制，自适应手机全屏。",
+    "description": "网易云风格音乐播放器：网易云搜索（免后端 Meting 聚合，可自建 NeteaseCloudMusicApi 升级 320k/会员）+ 同步网易云歌单 + 本地文件 + 直链 URL 播放、同步歌词、歌单、三种循环模式、进度/音量控制，自适应手机全屏。",
     "author": "cc_test",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "loading_order": 100,
     "requires": [],
     "optional": [],

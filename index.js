@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.7.0'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.8.0'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -61,6 +61,7 @@ let settings = {
 
 const ncm = {
     results: [],        // 搜索结果缓存
+    playlists: [],      // 同步到的网易云歌单 [{id,name,count,cover,mine}]
     lyricLines: [],     // 当前歌词 [{time, text}]
     lyricTrans: [],     // 翻译 [{time, text}]
     lyricCur: -1,       // 当前高亮歌词行，避免重复滚动
@@ -759,6 +760,115 @@ function syncNcmLoginUi() {
        .attr('title', logged ? '网易云已登录（扫码或 Cookie）' : '扫码登录网易云');
 }
 
+// —— 同步网易云歌单（单向：拉进插件）——
+async function ncmLoginStatus() {
+    try {
+        const d = await ncmFetch(`/login/status?timestamp=${Date.now()}`);
+        const acct = d && d.data && d.data.account;
+        return (acct && acct.id) ? acct.id : null;
+    } catch (e) { return null; }
+}
+
+async function ncmUserPlaylists(uid) {
+    const d = await ncmFetch(`/user/playlist?uid=${uid}&limit=1000`);
+    const list = (d && d.playlist) || [];
+    return list.map(p => ({
+        id: p.id,
+        name: p.name || '未命名歌单',
+        count: p.trackCount || 0,
+        cover: p.coverImgUrl || '',
+        mine: !!(p.creator && p.creator.userId === uid),
+    }));
+}
+
+async function ncmPlaylistTracks(plid) {
+    const d = await ncmFetch(`/playlist/detail?id=${plid}`);
+    const tracks = (d && d.playlist && d.playlist.tracks) || [];
+    return tracks.map(t => ({
+        id: t.id,
+        name: t.name || '',
+        artist: (t.ar || []).map(a => a.name).join(' / '),
+        cover: (t.al && t.al.picUrl) || '',
+        duration: (t.dt || 0) / 1000,
+    }));
+}
+
+function renderNcmPlaylists() {
+    const el = $('#st-error .err__ncm-plists');
+    if (!el.length) return;
+    el.empty();
+    if (!ncm.playlists.length) { el.append('<div class="err__ncm-hint">没有歌单</div>'); return; }
+    ncm.playlists.forEach(pl => {
+        const thumb = pl.cover
+            ? `<span class="err__ncm-thumb" style="background-image:url('${pl.cover.replace(/'/g, "\\'")}')"></span>`
+            : `<span class="err__ncm-thumb err__ncm-thumb--none">${ICONS.music}</span>`;
+        el.append(`<div class="err__ncm-row err__ncm-plist" data-id="${pl.id}">
+            ${thumb}
+            <div class="err__ncm-meta">
+                <div class="err__ncm-name">${escapeHtml(pl.name)}</div>
+                <div class="err__ncm-artist">${escapeHtml(pl.mine ? '我创建的歌单' : '收藏的歌单')}</div>
+            </div>
+            <span class="err__ncm-dur">${pl.count} 首</span>
+        </div>`);
+    });
+}
+
+async function ncmSyncPlaylists() {
+    const el = $('#st-error .err__ncm-plists');
+    if (!settings.neteaseApi) { toastr.warning('请先配置网易云 API 地址（点旁边的齿轮）'); return; }
+    if (el.length) el.show().html('<div class="err__ncm-hint">同步中…</div>');
+    try {
+        const uid = await ncmLoginStatus();
+        if (!uid) {
+            if (el.length) el.html('<div class="err__ncm-hint">未登录：请在齿轮里填 MUSIC_U cookie，或扫码登录</div>');
+            return;
+        }
+        ncm.playlists = await ncmUserPlaylists(uid);
+        renderNcmPlaylists();
+        if (!ncm.playlists.length) toastr.info('没有拉到歌单');
+    } catch (e) {
+        if (el.length) el.html('<div class="err__ncm-hint">同步失败，请检查 API 地址与登录态</div>');
+    }
+}
+
+async function ncmImportPlaylist(plid) {
+    const pl = ncm.playlists.find(p => String(p.id) === String(plid));
+    if (!pl) return;
+    const el = $('#st-error .err__ncm-plists');
+    if (el.length) el.html('<div class="err__ncm-hint">拉取歌单「' + escapeHtml(pl.name) + '」中…</div>');
+    try {
+        const tracks = await ncmPlaylistTracks(pl.id);
+        if (!tracks.length) {
+            if (el.length) el.html('<div class="err__ncm-hint">歌单是空的</div>');
+            return;
+        }
+        ensurePlaylists();
+        // 同名歌单复用，否则新建一个
+        let target = settings.playlists.find(p => p.name === pl.name);
+        if (!target) {
+            target = { id: uid(), name: pl.name, songIds: [], cover: pl.cover };
+            settings.playlists.push(target);
+        } else if (pl.cover && !target.cover) {
+            target.cover = pl.cover;
+        }
+        let added = 0;
+        for (const t of tracks) {
+            let s = settings.songs.find(x => x.source === 'netease' && String(x.ncmId) === String(t.id));
+            if (!s) {
+                s = { id: uid(), title: t.name, artist: t.artist, cover: t.cover, duration: t.duration, source: 'netease', ncmId: t.id };
+                settings.songs.push(s);
+            }
+            if (!target.songIds.includes(s.id)) { target.songIds.push(s.id); added++; }
+        }
+        saveSettings();
+        renderAll();
+        toastr.success(`已导入「${pl.name}」${added} 首`);
+        renderNcmPlaylists();
+    } catch (e) {
+        if (el.length) el.html('<div class="err__ncm-hint">导入失败，请重试</div>');
+    }
+}
+
 // ---------------- 渲染 ----------------
 function renderControls() {
     const panel = $('#st-error');
@@ -1145,6 +1255,7 @@ function buildPanel() {
                 <input type="text" class="err__ncm-input" placeholder="搜索网易云歌曲">
                 <button type="button" class="err__ncm-search" title="搜索">${ICONS.search}</button>
                 <button type="button" class="err__ncm-login" title="扫码登录网易云">${ICONS.qr}</button>
+                <button type="button" class="err__ncm-sync" title="同步网易云歌单">${ICONS.list}</button>
                 <button type="button" class="err__ncm-gear" title="API 设置">${ICONS.gear}</button>
               </div>
               <div class="err__ncm-settings" style="display:none">
@@ -1153,6 +1264,7 @@ function buildPanel() {
                 <button type="button" class="err__ncm-save">保存</button>
               </div>
               <div class="err__ncm-results"></div>
+              <div class="err__ncm-plists" style="display:none"></div>
             </div>
           </div>
         </section>
@@ -1459,6 +1571,10 @@ function bindPanelEvents() {
         toastr.success('网易云设置已保存');
     });
     panel.find('.err__ncm-login').on('click', ncmLogin);
+    panel.find('.err__ncm-sync').on('click', ncmSyncPlaylists);
+    panel.find('.err__ncm-plists').on('click', '.err__ncm-plist', function () {
+        ncmImportPlaylist($(this).data('id'));
+    });
     panel.find('.err__ncm-results').on('click', '.err__ncm-row', function () {
         const song = ncm.results.find(s => String(s.id) === String($(this).data('id')));
         if (!song) return;
