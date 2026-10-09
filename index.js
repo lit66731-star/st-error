@@ -6,7 +6,7 @@
    ========================================================================== */
 
 const extensionName = 'error';
-const VERSION = '1.8.0'; // 面板标题旁展示，更新时与 manifest.json 同步
+const VERSION = '1.8.1'; // 面板标题旁展示，更新时与 manifest.json 同步
 
 // ---------------- 图标（线性极简） ----------------
 const ICONS = {
@@ -728,6 +728,11 @@ async function ncmQrPoll() {
         if (code === 803) {
             clearInterval(ncm.qrTimer); ncm.qrTimer = null;
             settings.neteaseLoggedIn = true;
+            // 扫码成功后登录态放在响应的 cookie 字段里；插件 fetch 用 credentials:'omit'
+            // 拿不到浏览器保存的 Set-Cookie，必须把 MUSIC_U 抠出来存进 settings，后续请求才带得上登录态
+            const ck = (s && s.cookie) || '';
+            const mm = ck.match(/MUSIC_U=([^;]+)/);
+            if (mm && mm[1]) settings.neteaseCookie = mm[1].trim();
             saveSettings();
             syncNcmLoginUi();
             statusEl.text('登录成功：' + (s.nickname || '网易云'));
